@@ -79,6 +79,16 @@ int main(int argc, char **argv) {
 
   std::cout << "Doing some initialization...\n\n";
 
+  /*--------------*/
+  // Clean output //
+  /*--------------*/
+ 
+   if( remove(parser.outputPath()) != 0 ){
+     std::cout << parser.outputPath() << " does not exsist." << std::endl;
+   }
+   else
+     std::cout << "Successfully removed " << parser.outputPath() << std::endl; 
+
   /*------------------------*/
   // init process-port dict //
   /*------------------------*/
@@ -150,7 +160,7 @@ int main(int argc, char **argv) {
 
     // AF_INET: IPv4, SOCK_DGRAM: UDP/IP
     if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
-        std::cerr << "[ERROR] socket()" << socket_fd << std::endl;
+        std::cout << "[ERROR] socket()" << socket_fd << std::endl;
         return -1; 
     }
                                                                                                                      
@@ -170,7 +180,7 @@ int main(int argc, char **argv) {
                                                                                                                      
     // bind socket to server address
     if (int64_t bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)) < 0){
-      std::cerr << "[ERROR] bind()" << bind_return << std::endl;
+      std::cout << "[ERROR] bind()" << bind_return << std::endl;
       return -1;     
     }
     
@@ -187,6 +197,7 @@ int main(int argc, char **argv) {
 
       if (msg_recv < 0) {
           std::cout << "Receive failed with error" << std::endl;
+          return -1;
       }else if (msg_recv != 0) {
           msg_buf[msg_recv] = '\0'; //end of line to truncate junk
           std::cout << "Received " << msg_recv << " characters successfully." << std::endl;
@@ -203,6 +214,7 @@ int main(int argc, char **argv) {
             output_file.close();
           }else{
             std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
+            return -1;
           }
       } // if
     } // while
@@ -216,7 +228,7 @@ int main(int argc, char **argv) {
 
     // AF_INET: IPv4, SOCK_DGRAM: UDP/IP
     if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
-        std::cerr << "[ERROR] socket()" << socket_fd << std::endl;
+        std::cout << "[ERROR] socket()" << socket_fd << std::endl;
         return -1; 
     }
 
@@ -233,7 +245,7 @@ int main(int argc, char **argv) {
     client_addr.sin_port = htons(my_port);  // port of my process
     std::cout << "server port: " << htons(my_port) << " " << client_addr.sin_port <<  std::endl;
     if (int64_t bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr)) < 0){
-      std::cerr << "[ERROR] bind()" << bind_return << std::endl;
+      std::cout << "[ERROR] bind()" << bind_return << std::endl;
       return -1;     
     }
 
@@ -241,15 +253,41 @@ int main(int argc, char **argv) {
     for (int msg_i=1; msg_i<=config_m; msg_i++){
 
       std::string msg_i_str = std::to_string(msg_i);
-      std::cout << "Sending message: " << msg_i_str << " of length: " << msg_i_str.length() << std::endl;
+      std::cout << "Sending message: " << msg_i_str << " from port " << my_port << " of length: " << msg_i_str.length() << std::endl;
       
       // send to server
       int64_t msg_send = sendto(socket_fd, msg_i_str.c_str(), msg_i_str.length(), 0,
           reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr));  // returns number of characters sent
       if (msg_send < 0) {
           std::cout << "Send failed with error" << std::endl;
+          return -1;
+      }else{
+          std::cout << "Send successful: " << msg_send << std::endl;
+
+          // write broadcast event output
+          std::ofstream output_file;
+          output_file.open(parser.outputPath(), std::ios_base::app);
+          if (output_file.is_open()){
+            output_file << "b " <<  msg_i_str << std::endl;
+            output_file.close();
+          }else{
+            std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
+            return -1;
+          }
+
+
+
+
+
+
+
+
+
+
+
+
+
       }
-      std::cout << "Send successful: " << msg_send << std::endl;
     } // end for
   } // end if
 
