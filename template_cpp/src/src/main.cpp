@@ -200,12 +200,9 @@ int main(int argc, char **argv) {
           return -1;
       }else if (msg_recv != 0) {
           msg_buf[msg_recv] = '\0'; //end of line to truncate junk
-          std::cout << "Received " << msg_recv << " characters successfully." << std::endl;
-          printf("Received message: %s\n", msg_buf);
-         
           int client_port = ntohs(client_addr.sin_port); 
-          std::cout << "Client address port: " << client_port << std::endl;
-
+          std::cout << "Successfully received message: " << msg_buf << " having " << msg_recv << " characters from port: " << client_port << std::endl;
+         
           // write to output
           std::ofstream output_file;
           output_file.open(parser.outputPath(), std::ios_base::app);
