@@ -99,6 +99,12 @@ int main(int argc, char **argv) {
     std::cout << "port: " << host.port << ": process ID " << port_proc_dict[host.port] << std::endl;
   }
 
+  /*------------------------------------*/
+  // init process-received message dict //
+  /*------------------------------------*/
+
+  std::map<int64_t, std::vector<std::string>> proc_recv_dict;
+
   /*------------------*/
   // read config file //
   /*------------------*/
@@ -194,25 +200,48 @@ int main(int argc, char **argv) {
     while(true){
       int64_t msg_recv = recvfrom(socket_fd, msg_buf, sizeof(msg_buf), 0,
           reinterpret_cast<struct sockaddr *>(&client_addr), &client_addr_size);  // returns length of incoming message
-
       if (msg_recv < 0) {
-          std::cout << "Receive failed with error" << std::endl;
-          return -1;
+        std::cout << "Receive failed with error" << std::endl;
+        return -1;
       }else if (msg_recv != 0) {
-          msg_buf[msg_recv] = '\0'; //end of line to truncate junk
-          int client_port = ntohs(client_addr.sin_port); 
-          std::cout << "Successfully received message: " << msg_buf << " having " << msg_recv << " characters from port: " << client_port << std::endl;
-         
-          // write to output
-          std::ofstream output_file;
-          output_file.open(parser.outputPath(), std::ios_base::app);
-          if (output_file.is_open()){
-            output_file << "d " << port_proc_dict[client_port] << " " << msg_buf << std::endl;
-            output_file.close();
-          }else{
-            std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
+        msg_buf[msg_recv] = '\0'; //end of line to truncate junk
+        int client_port = ntohs(client_addr.sin_port); 
+        std::cout << "Successfully received message: " << msg_buf << ", having length " << msg_recv << ", from port: " << client_port << std::endl;
+
+        // upon successful receive trigger event send ack
+        std::string msg_ack = "ack";
+        std::cout << "Sending message: " << msg_ack << ", of length: " << msg_ack.length() << ", from port: " << my_port << ", to port: " << client_port << std::endl;
+        int64_t msg_ack_send = sendto(socket_fd, msg_ack.c_str(), msg_ack.length(), 0,
+            reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr));  // returns number of characters sent
+        if (msg_ack_send < 0) {
+            std::cout << "Sending message " << msg_ack << " failed with error" << std::endl;
             return -1;
-          }
+        }else{
+            std::cout << "Send successful: " << msg_ack_send << std::endl;
+        }
+
+        // if message is duplicate, do not store in log (if not in dict add to it)
+        int64_t client_pid = port_proc_dict[client_port];
+        if (proc_recv_dict.find(client_pid) == proc_recv_dict.end()) {
+          // pid is not in dict i.e. this is the first msg from proc pid
+          proc_recv_dict[client_pid].push_back(msg_buf);
+        } else {
+          // pid is already in dict i.e. msg might be a duplicate
+          // if this is true msg_buf is not yet in dict[pid]
+          if (std::find(proc_recv_dict[client_pid].begin(), proc_recv_dict[client_pid].end(), msg_buf) == proc_recv_dict[client_pid].end()){
+            // msg is not yet in dict so log it
+            std::ofstream output_file;
+            output_file.open(parser.outputPath(), std::ios_base::app);
+            if (output_file.is_open()){
+              output_file << "d " << client_pid << " " << msg_buf << std::endl;
+              output_file.close();
+            }else{
+              std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
+              return -1;
+            } // end if
+          } // end if
+        } // end if
+
       } // if
     } // while
  
@@ -248,20 +277,16 @@ int main(int argc, char **argv) {
 
     std::cout << "Starting sending messages..." << std::endl;
     for (int msg_i=1; msg_i<=config_m; msg_i++){
-
+      // send each message in a while loop that terminates only when client receives the ack from server
       std::string msg_i_str = std::to_string(msg_i);
-      std::cout << "Sending message: " << msg_i_str << " from port " << my_port << " of length: " << msg_i_str.length() << std::endl;
-      
-      // send to server
-      int64_t msg_send = sendto(socket_fd, msg_i_str.c_str(), msg_i_str.length(), 0,
-          reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr));  // returns number of characters sent
-      if (msg_send < 0) {
-          std::cout << "Send failed with error" << std::endl;
-          return -1;
-      }else{
-          std::cout << "Send successful: " << msg_send << std::endl;
-
-          // write broadcast event output
+      std::cout << "Sending message: " << msg_i_str << ", of length: " << msg_i_str.length() << ", from port: " << my_port << ", to port: " << serv_port << std::endl;
+      int64_t msg_i_send_count = 0;
+      while(true){ 
+        int64_t msg_send = sendto(socket_fd, msg_i_str.c_str(), msg_i_str.length(), 0,
+            reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr));  // returns number of characters sent
+        
+        // sender logs broadcast event only once at first send
+        if (msg_i_send_count == 0){
           std::ofstream output_file;
           output_file.open(parser.outputPath(), std::ios_base::app);
           if (output_file.is_open()){
@@ -270,21 +295,20 @@ int main(int argc, char **argv) {
           }else{
             std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
             return -1;
-          }
+          } // end if
+        } // end if
+        msg_i_send_count += 1;
+ 
+        if (msg_send < 0) {
+            std::cout << "Send failed with error" << std::endl;
+            return -1;
+        }else{
+            std::cout << "Send successful: " << msg_send << std::endl;
 
+            // TODO: exit while upon reception of ack
 
-
-
-
-
-
-
-
-
-
-
-
-      }
+        } // end if
+      } // end while
     } // end for
   } // end if
 
