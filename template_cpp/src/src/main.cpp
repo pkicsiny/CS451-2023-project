@@ -428,10 +428,10 @@ int main(int argc, char **argv) {
 
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.
-//  while (true) {
+  while (true) {
     
     //std::this_thread::sleep_for(std::chrono::hours(1));
-//  }
+  }
 
   return 0;
 }
