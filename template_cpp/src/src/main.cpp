@@ -34,6 +34,41 @@ static void stop(int) {
   exit(0);
 }
 
+int log_deliver(const char*, const char, int64_t, const char*);
+int log_deliver(const char* output_path, const char msg_type, int64_t pid, const char* msg_buf){
+
+  // log into
+  std::ofstream output_file;
+  output_file.open(output_path, std::ios_base::app);
+
+  if (output_file.is_open()){
+    output_file << msg_type << " " << pid << " " << msg_buf << std::endl;
+    output_file.close();
+    return 0;
+  }else{
+    std::cout << "Could not open output file: " << output_path << std::endl;
+    return -1;
+  }
+}
+
+int log_broadcast(const char*, std::string);
+int log_broadcast(const char* output_path, std::string msg_buf){
+    std::ofstream output_file;
+    output_file.open(output_path, std::ios_base::app);
+    if (output_file.is_open()){
+      output_file << "b " <<  msg_buf << std::endl;
+      output_file.close();
+      return 0;
+    }else{
+      std::cout << "Could not open output file: " << output_path << std::endl;
+      return -1;
+    }
+}
+
+
+
+
+
 int main(int argc, char **argv) {
   signal(SIGTERM, stop);
   signal(SIGINT, stop);
@@ -216,7 +251,7 @@ int main(int argc, char **argv) {
                                                                                                                      
     // bind socket to server address
     if (int64_t bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)) < 0){
-      std::cout << "[ERROR] bind()" << bind_return << std::endl;
+      std::cout << "[ERROR] bind(): " << bind_return << std::endl;
       return -1;     
     }
     
@@ -234,23 +269,10 @@ int main(int argc, char **argv) {
           reinterpret_cast<struct sockaddr *>(&client_addr), &client_addr_size);  // returns length of incoming message
       if (msg_recv < 0) {
         std::cout << "Receive failed with error" << std::endl;
-        return -1;
       }else if (msg_recv != 0) {
         msg_buf[msg_recv] = '\0'; //end of line to truncate junk
         int client_port = ntohs(client_addr.sin_port); 
-        std::cout << "Successfully received message: " << msg_buf << ", having length " << msg_recv << ", from port: " << client_port << std::endl;
-
-        // upon successful receive trigger event send ack once, ack is "port msg"
-        std::string msg_ack = std::to_string(client_port) + " " + msg_buf;
-        std::cout << "Sending ack message: " << msg_ack << ", of length: " << msg_ack.length() << ", from port: " << my_port << ", to port: " << client_port << std::endl;
-        int64_t msg_ack_send = sendto(socket_fd, msg_ack.c_str(), msg_ack.length(), 0,
-            reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr));  // returns number of characters sent
-        if (msg_ack_send < 0) {
-            std::cout << "Sending ack message " << msg_ack << " failed with error" << std::endl;
-            return -1;
-        }else{
-            std::cout << "[Send ack successful]" << std::endl;
-        }
+        //std::cout << "Successfully received message: " << msg_buf << ", having length " << msg_recv << ", from port: " << client_port << std::endl;
 
         // if message is duplicate, do not store in log (if not in dict add to it)
         int64_t client_pid = port_proc_dict[client_port];
@@ -258,17 +280,7 @@ int main(int argc, char **argv) {
         // pid is not in dict i.e. this is the first msg from proc pid
         if (proc_recv_dict.find(client_pid) == proc_recv_dict.end()) {
           proc_recv_dict[client_pid].push_back(msg_buf);
-
-          // log into
-          std::ofstream output_file;
-          output_file.open(parser.outputPath(), std::ios_base::app);
-          if (output_file.is_open()){
-            output_file << "d " << client_pid << " " << msg_buf << std::endl;
-            output_file.close();
-          }else{
-            std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
-            return -1;
-          }
+          log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
 
         // pid is already in dict i.e. msg might be a duplicate
         } else {
@@ -277,30 +289,20 @@ int main(int argc, char **argv) {
           if (std::find(proc_recv_dict[client_pid].begin(), proc_recv_dict[client_pid].end(), msg_buf) == proc_recv_dict[client_pid].end()){
             // msg is not yet in dict so log it
             proc_recv_dict[client_pid].push_back(msg_buf);
-
-            // log into output
-            std::ofstream output_file;
-            output_file.open(parser.outputPath(), std::ios_base::app);
-            if (output_file.is_open()){
-              output_file << "d " << client_pid << " " << msg_buf << std::endl;
-              output_file.close();
-            }else{
-              std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
-              return -1;
-            }
+            log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
 
           } // end if
         } // end if
 
         // print received messages
-        std::cout << "Received messages:" << std::endl;
-        for (auto const &pair: proc_recv_dict) {
-          std::cout << "PID " << pair.first << ": [";
-          for (auto const& i: pair.second){
-            std::cout << i << ", ";
-          }
-          std::cout << "]" << std::endl;
-        }
+        //std::cout << "Received messages:" << std::endl;
+        //for (auto const &pair: proc_recv_dict) {
+        //  std::cout << "PID " << pair.first << ": [";
+        //  for (auto const& i: pair.second){
+        //    std::cout << i << ", ";
+        //  }
+        //  std::cout << "]" << std::endl;
+        //}
 
       } // if (msg_recv < 0)
     } // while recv
@@ -329,9 +331,9 @@ int main(int argc, char **argv) {
     client_addr.sin_family = AF_INET; 
     client_addr.sin_addr.s_addr = INADDR_ANY; //inet_addr(my_ip); //INADDR_ANY;  
     client_addr.sin_port = htons(my_port);  // port of my process
-    std::cout << "server port: " << htons(my_port) << " " << client_addr.sin_port <<  std::endl;
+    std::cout << "Client port: " << my_port << " " << client_addr.sin_port << " size: " << sizeof(client_addr) << std::endl;
     if (int64_t bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr)) < 0){
-      std::cout << "[ERROR] bind()" << bind_return << std::endl;
+      std::cout << "[ERROR] bind(): " << bind_return << std::endl;
       return -1;     
     }
 
@@ -344,82 +346,34 @@ int main(int argc, char **argv) {
 
     std::cout << "Start sending messages..." << std::endl;
     while(!msg_list.empty()){ 
-      std::cout << "Messages in message list to send: [";
-      for (auto const& i : msg_list){
-        std::cout << i << ", ";
-      }
-      std::cout << "]" << std::endl;
+      //std::cout << "Messages in message list to send: [";
+      //for (auto const& i : msg_list){
+      //  std::cout << i << ", ";
+      //}
+      //std::cout << "]" << std::endl;
 
       for (auto const& msg_i : msg_list){  // loop over messages
         // send each message in a while loop that terminates only when client receives the ack from server
         std::string msg_i_str = std::to_string(msg_i);
-        std::cout << "Sending message: " << msg_i_str << ", of length: " << msg_i_str.length() << ", from port: " << my_port << ", to port: " << serv_port << std::endl;
+        //std::cout << "Sending message: " << msg_i_str << ", of length: " << msg_i_str.length() << ", from port: " << my_port << ", to port: " << serv_port << std::endl;
 
         int64_t msg_send = sendto(socket_fd, msg_i_str.c_str(), msg_i_str.length(), 0,
             reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr));  // returns number of characters sent
         
-        // sender logs broadcast event only once at first send
+        // log broadcast after first send
         if (pid_msg_count_dict[serv_port][msg_i] == 0){
-          std::ofstream output_file;
-          output_file.open(parser.outputPath(), std::ios_base::app);
-          if (output_file.is_open()){
-            output_file << "b " <<  msg_i_str << std::endl;
-            output_file.close();
-          }else{
-            std::cout << "Could not open output file: " << parser.outputPath() << std::endl;
-            return -1;
-          } // end if
-        } // end if
+          log_broadcast(parser.outputPath(), msg_i_str);
+        }
         
         // increment sent msg_i to pid once more
         pid_msg_count_dict[serv_port][msg_i] += 1;
 
         if (msg_send < 0) {
             std::cout << "[Send ERROR]" << std::endl;
-            return -1;
-        }else{
-            std::cout << "[Send successful]" << std::endl;
-        } // end if
+        }//else{
+            //std::cout << "[Send successful]" << std::endl;
+        //} // end if
       } // end for
-
-      // listen to acks, ack is a tuple of (pdi, msg)
-      std::cout << "Listening to acks..." << std::endl;
-      while(true){
-
-        // this is blocking so it listens indefinitely; make it nonblocking by setting a timeout
-        int64_t ack_recv = recvfrom(socket_fd, ack_buf, sizeof(ack_buf), 0,
-            reinterpret_cast<struct sockaddr *>(&serv_addr), &serv_addr_size);  // returns length of incoming message
-        if (ack_recv < 0) {
-          break; // terminate while loop i.e. no more ack to receive
-        }else if (ack_recv != 0) {
-          ack_buf[ack_recv] = '\0'; //end of line to truncate junk
-          int serv_port = ntohs(serv_addr.sin_port); 
-          std::cout << "Successfully received ack message: " << ack_buf << ", having length " << ack_recv << ", from port: " << serv_port << std::endl;
-          // split string
-          std::stringstream ss(ack_buf);
-          std::string word;
-          std::vector<int> ack_vec;
-    
-          while (std::getline(ss, word, ' ')) {
-            ack_vec.push_back(std::stoi(word));
-          }
-  
-          // get index of msg in msg_list
-          uint64_t msg_list_idx = std::distance(msg_list.begin(), std::find(msg_list.begin(), msg_list.end(), ack_vec[1]));
-
-          if(msg_list_idx >= msg_list.size()) {
-            std::cout << "Ack msg " << ack_vec[1] << " not in msg_list" << std::endl;
-          } else {
-            // remove acked msg from msg_list
-            msg_list.erase(msg_list.begin()+msg_list_idx);
-            std::cout << "msg_list after removing acked " << ack_vec[1] << ": [";
-            for (auto const& i : msg_list){
-              std::cout << i << ", ";
-            }
-            std::cout << "]" << std::endl;
-          }  // end if
-        }  // end if (ack_recv < 0)
-      }  // end while recv
 
   }  // end while send
 
