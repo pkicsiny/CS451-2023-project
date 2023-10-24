@@ -412,7 +412,7 @@ int main(int argc, char **argv) {
         }else if (ack_recv != 0) {
           ack_buf[ack_recv] = '\0'; //end of line to truncate junk
           int serv_port = ntohs(serv_addr.sin_port); 
-          std::cout << "Successfully received ack message: " << ack_buf << ", having length " << ack_recv << ", from port: " << serv_port << std::endl;
+          //std::cout << "Successfully received ack message: " << ack_buf << ", having length " << ack_recv << ", from port: " << serv_port << std::endl;
           // split string
           std::istringstream ss(ack_buf);
           std::string word;
@@ -426,11 +426,11 @@ int main(int argc, char **argv) {
           uint64_t msg_list_idx = std::distance(msg_list.begin(), std::find(msg_list.begin(), msg_list.end(), ack_vec[1]));
 
           if(msg_list_idx >= msg_list.size()) {
-            std::cout << "Ack msg " << ack_vec[1] << " not in msg_list" << std::endl;
+            //std::cout << "Ack msg " << ack_vec[1] << " not in msg_list" << std::endl;
           } else {
             // remove acked msg from msg_list
             msg_list.erase(msg_list.begin()+msg_list_idx);
-            std::cout << "msg_list after removing acked " << ack_vec[1] << ": [";
+            //std::cout << "msg_list after removing acked " << ack_vec[1] << ": [";
             for (auto const& i : msg_list){
               std::cout << i << ", ";
             }
