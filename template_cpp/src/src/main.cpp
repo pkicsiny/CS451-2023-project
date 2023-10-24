@@ -286,14 +286,14 @@ int main(int argc, char **argv) {
 
         // upon successful receive trigger event send ack once, ack is "port msg"
         std::string msg_ack = std::to_string(client_port) + " " + msg_buf;
-        std::cout << "Sending ack message: " << msg_ack << ", of length: " << msg_ack.length() << ", from port: " << my_port << ", to port: " << client_port << std::endl;
+        //std::cout << "Sending ack message: " << msg_ack << ", of length: " << msg_ack.length() << ", from port: " << my_port << ", to port: " << client_port << std::endl;
         int64_t msg_ack_send = sendto(socket_fd, msg_ack.c_str(), msg_ack.length(), 0,
             reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr));  // returns number of characters sent
         if (msg_ack_send < 0) {
             std::cout << "Sending ack message " << msg_ack << " failed with error" << std::endl;
             return -1;
         }else{
-            std::cout << "[Send ack successful]" << std::endl;
+            //std::cout << "[Send ack successful]" << std::endl;
         }
 
         // if message is duplicate, do not store in log (if not in dict add to it)
