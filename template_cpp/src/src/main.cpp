@@ -196,10 +196,10 @@ int main(int argc, char **argv) {
   for (int i=0; i<config_m; i++){
     msg_list[i] = i+1;
   }
-  std::cout << "message list:" << std::endl;
-  for (auto const& msg_i : msg_list){
-    std::cout << msg_i << std::endl;
-  }
+  //std::cout << "message list:" << std::endl;
+  //for (auto const& msg_i : msg_list){
+  //  std::cout << msg_i << std::endl;
+  //}
 
   /*-------------------------*/
   // init pid msg count dict //
