@@ -304,8 +304,6 @@ int main(int argc, char **argv) {
           proc_recv_dict[client_pid].push_back(msg_buf);
           //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
           logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
-          std::cout << "to log: " << logger_p2p.ss.str() << std::endl;
-          //logger_p2p.log_delivery(ss_recv);
 
         // pid is already in dict i.e. msg might be a duplicate
         } else {
@@ -316,8 +314,6 @@ int main(int argc, char **argv) {
             proc_recv_dict[client_pid].push_back(msg_buf);
             //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
             logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
-            std::cout << "to log: " << logger_p2p.ss.str() << std::endl;
-            //logger_p2p.log_delivery(ss_recv);
 
           } // end if
         } // end if
@@ -392,8 +388,6 @@ int main(int argc, char **argv) {
         if (pid_msg_count_dict[serv_port][msg_i] == 0){
           //log_broadcast(parser.outputPath(), msg_i_str);
           logger_p2p.ss << 'b' << ' ' << msg_i_str << '\n';
-          std::cout << "to log: " << logger_p2p.ss.str() << std::endl;
-          //logger_p2p.log_delivery(ss_send);
         }
         
         // increment sent msg_i to pid once more
