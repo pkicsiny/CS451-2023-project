@@ -431,10 +431,10 @@ int main(int argc, char **argv) {
             // remove acked msg from msg_list
             msg_list.erase(msg_list.begin()+msg_list_idx);
             //std::cout << "msg_list after removing acked " << ack_vec[1] << ": [";
-            for (auto const& i : msg_list){
-              std::cout << i << ", ";
-            }
-            std::cout << "]" << std::endl;
+            //for (auto const& i : msg_list){
+            //  std::cout << i << ", ";
+            //}
+            //std::cout << "]" << std::endl;
           }  // end if
         }  // end if (ack_recv < 0)
       }  // end while recv
