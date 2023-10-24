@@ -303,7 +303,7 @@ int main(int argc, char **argv) {
         // pid is not in dict i.e. this is the first msg from proc pid
         if (proc_recv_dict.find(client_pid) == proc_recv_dict.end()) {
           proc_recv_dict[client_pid].push_back(msg_buf);
-          log_deliver("test_out.txt", 'd', client_pid, msg_buf);
+          //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
           logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
 
         // pid is already in dict i.e. msg might be a duplicate
@@ -313,7 +313,7 @@ int main(int argc, char **argv) {
           if (std::find(proc_recv_dict[client_pid].begin(), proc_recv_dict[client_pid].end(), msg_buf) == proc_recv_dict[client_pid].end()){
             // msg is not yet in dict so log it
             proc_recv_dict[client_pid].push_back(msg_buf);
-            log_deliver("test_out.txt", 'd', client_pid, msg_buf);
+            //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
             logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
 
           } // end if
