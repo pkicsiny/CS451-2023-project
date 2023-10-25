@@ -10,6 +10,17 @@
 #include <cstring>
 #include <unistd.h>
 
+class Message {
+  public:
+    int sn;  // sequence number
+    std::string msg;  // actual message string  
+
+    Message(int sequencenumber, std::string message) {
+      sn = sequencenumber;
+      msg = message;
+    }
+};
+
 class Logger {
   public:
     const char* output_path;
