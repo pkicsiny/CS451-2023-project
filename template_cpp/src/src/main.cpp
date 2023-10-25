@@ -304,7 +304,9 @@ int main(int argc, char **argv) {
         if (proc_recv_dict.find(client_pid) == proc_recv_dict.end()) {
           proc_recv_dict[client_pid].push_back(msg_buf);
           //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
+          std::cout << "before: " << ss.str() << std::endl;
           logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
+          std::cout << "after: " << ss.str() << std::endl;
 
         // pid is already in dict i.e. msg might be a duplicate
         } else {
@@ -314,7 +316,10 @@ int main(int argc, char **argv) {
             // msg is not yet in dict so log it
             proc_recv_dict[client_pid].push_back(msg_buf);
             //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
+            // print ss here before and after this line to see each append is successful or not
+            std::cout << "before: " << ss.str() << std::endl;
             logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
+            std::cout << "after: " << ss.str() << std::endl;
 
           } // end if
         } // end if
