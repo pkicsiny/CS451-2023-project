@@ -283,7 +283,7 @@ int main(int argc, char **argv) {
       }else if (msg_recv != 0) {
         msg_buf[msg_recv] = '\0'; //end of line to truncate junk
         int client_port = ntohs(client_addr.sin_port); 
-        //std::cout << "Successfully received message: " << msg_buf << ", having length " << msg_recv << ", from port: " << client_port << std::endl;
+        std::cout << "Successfully received message: " << msg_buf << ", having length " << msg_recv << ", from port: " << client_port << std::endl;
 
         // upon successful receive trigger event send ack once, ack is "port msg"
         std::string msg_ack = std::to_string(client_port) + " " + msg_buf;
@@ -304,9 +304,9 @@ int main(int argc, char **argv) {
         if (proc_recv_dict.find(client_pid) == proc_recv_dict.end()) {
           proc_recv_dict[client_pid].push_back(msg_buf);
           //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
-          std::cout << "before: " << logger_p2p.ss.str() << std::endl;
+          //std::cout << "before: " << logger_p2p.ss.str() << std::endl;
           logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
-          std::cout << "after: " << logger_p2p.ss.str() << std::endl;
+          //std::cout << "after: " << logger_p2p.ss.str() << std::endl;
 
         // pid is already in dict i.e. msg might be a duplicate
         } else {
@@ -317,9 +317,9 @@ int main(int argc, char **argv) {
             proc_recv_dict[client_pid].push_back(msg_buf);
             //log_deliver(parser.outputPath(), 'd', client_pid, msg_buf);
             // print ss here before and after this line to see each append is successful or not
-            std::cout << "before: " << logger_p2p.ss.str() << std::endl;
+            //std::cout << "before: " << logger_p2p.ss.str() << std::endl;
             logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg_buf << '\n';
-            std::cout << "after: " << logger_p2p.ss.str() << std::endl;
+            //std::cout << "after: " << logger_p2p.ss.str() << std::endl;
 
           } // end if
         } // end if
