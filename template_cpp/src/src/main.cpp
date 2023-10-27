@@ -19,7 +19,7 @@
 #define _XOPEN_SOURCE_EXTENDED 1
 
 #include <map>
-
+#include <limits>
 
 /*-------*/
 // begin //
@@ -37,7 +37,7 @@ static void stop(int) {
 
   // write/flush output file if necessary
   std::cout << "Writing output.\n";
-  std::cout << logger_p2p.ss.str() << std::endl;
+  //std::cout << logger_p2p.ss.str() << std::endl;
   logger_p2p.log_delivery();
 
   // exit directly from signal handler
@@ -121,6 +121,12 @@ int main(int argc, char **argv) {
 
   std::cout << "Doing some initialization...\n\n";
 
+  /*---------------------*/
+  // pid of this process //
+  /*---------------------*/
+
+  int64_t my_pid = parser.id();
+
   /*--------------*/
   // Clean output //
   /*--------------*/
@@ -158,6 +164,8 @@ int main(int argc, char **argv) {
   // read config file //
   /*------------------*/
 
+  std::vector<Message> msg_list;
+
   int NUM_MSG = -1, SERV_PID = -1;
   if (requireConfig){
     std::string l_in;
@@ -182,9 +190,70 @@ int main(int argc, char **argv) {
       return -1;
     }else{
       std::cout << "Config successfully read. Send " << NUM_MSG << " messages to process " << SERV_PID << std::endl;
+
+      // this bit is adapted to the config but msg_list could be filled up differently
+      for (int i=0; i<NUM_MSG; i++){
+        msg_list.push_back(Message(i, std::to_string(i+1)));  // sequencing starts from 0
+        //msg_list[i] = std::to_string(i+1);
+      }
     }
-  }else{  // if no config, read from file or something
+  }else{  // if no config, read from inout stream or something
+    SERV_PID = 1;
+
+    // I need the messages only if I am a sender (client)
+    if (my_pid != SERV_PID){
+
+      std::cout << "Enter the number of messages: ";
+      std::cin >> NUM_MSG;
+  
+      // check for correctness of input
+      while (!std::cin.good())
+      {
+      
+        // reset and ignore rest of cin
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        // ask again
+        std::cout << "Enter the number of messages: ";
+        std::cin >> NUM_MSG;
+      }
+      // reset and ignore rest of cin
+      std::cin.clear();
+      std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+      // at this point NUM_MSG is a valid int, but it has to be >0
+      if (NUM_MSG<=0){
+        std::cout << "NUM_MSG is invalid: " << NUM_MSG << std::endl;
+        return -1;
+      }
+
+      // cin the UNIQUE messages and push back to msg_list; one msg is the full line
+      std::string msg_cin_buf;
+      for (int i=0; i<NUM_MSG; i++){
+        std::cout << "Message " << i+1 << ": ";
+        std::getline(std::cin, msg_cin_buf);
+
+        // msg_list has to be unique, keep while msg_cin_buf is in msg_list
+        while (std::find_if(msg_list.begin(), msg_list.end(), [&msg_cin_buf](const Message& m) {return m.msg == msg_cin_buf;}) != msg_list.end()){
+  
+          // ask again
+          std::cout << "Message " << i+1 << ": ";
+          std::getline(std::cin, msg_cin_buf);
+        }  
+        msg_list.push_back(Message(i, msg_cin_buf));  // sequencing starts from 0
+      }
+    }
   }
+
+  std::cout << "Message list:" << std::endl;
+  for (auto const& msg_i : msg_list){
+    std::cout << msg_i.msg << std::endl;
+  }
+
+  /*-------------*/
+  // set IP:port //
+  /*-------------*/
 
   // set this process IP and port
   char my_ip[200];
@@ -198,26 +267,10 @@ int main(int argc, char **argv) {
   int serv_port = hosts[SERV_PID-1].port;
   std::cout << "server IP:" << serv_ip << ", server port:" << serv_port << std::endl;
 
-  /*-------------------*/
-  // init message list //
-  /*-------------------*/
-  
-  std::vector<Message> msg_list;
-
-  // this bit is adapted to the config but msg_list could be filled up differently
-  for (int i=0; i<NUM_MSG; i++){
-    msg_list.push_back(Message(i, std::to_string(i+1)));  // sequencing starts from 0
-    //msg_list[i] = std::to_string(i+1);
-  }
-  //std::cout << "message list:" << std::endl;
-  //for (auto const& msg_i : msg_list){
-  //  std::cout << msg_i << std::endl;
-  //}
-
   /*-------------------------*/
   // init pid msg count dict //
   /*-------------------------*/
-  
+
   // keeps track which msg has been sent to which process how many times
   std::map<int64_t, std::map<int, int> > pid_msg_count_dict;
   for (auto &host : hosts) {
@@ -228,11 +281,6 @@ int main(int argc, char **argv) {
     }
   }
 
-  // recv timeout
-  struct timeval read_timeout;
-  read_timeout.tv_sec = 0;
-  read_timeout.tv_usec = 10;
-
 
   /*---------------*/
   // create socket //
@@ -241,11 +289,15 @@ int main(int argc, char **argv) {
   int socket_fd;
   struct sockaddr_in serv_addr;
 
+  // recv timeout
+  struct timeval read_timeout;
+  read_timeout.tv_sec = 0;
+  read_timeout.tv_usec = 10;
+
   std::cout << "Broadcasting and delivering messages...\n\n";
 
   // on senders (clients): create a socket and bind (assign address) this socket to the receiver
   // on receiver (server): create a socket and listen for incoming events
-  int64_t my_pid = parser.id();
 
   /*--------*/
   // server //
@@ -306,7 +358,6 @@ int main(int argc, char **argv) {
             reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr));  // returns number of characters sent
         if (msg_ack_send < 0) {
             std::cout << "Sending ack message " << msg_ack << " failed with error" << std::endl;
-            return -1;
         }else{
             //std::cout << "[Send ack successful]" << std::endl;
         }
@@ -428,31 +479,24 @@ int main(int argc, char **argv) {
           int serv_port = ntohs(serv_addr.sin_port); 
           //std::cout << "Successfully received ack message: " << ack_buf << ", having length " << ack_recv << ", from port: " << serv_port << std::endl;
 
-          // ack string is: "client_pid m" 
-          std::istringstream ss(ack_buf);
-          std::string word;
-          std::vector<std::string> ack_vec;
-    
-          while (std::getline(ss, word, ' ')) {
-            ack_vec.push_back(word);
-          }
-  
-          // get index of msg in msg_list
-          std::string acked_msg = ack_vec[1];
-          auto acked_msg_it = std::find_if(msg_list.begin(), msg_list.end(), [&acked_msg](const Message& m) {return m.msg == acked_msg;});
+          // ack string is: "client_pid msg" 
+          std::string ack_str = std::string(ack_buf);
+          //std::cout << "ack_buf: " << ack_str << std::endl;
+          std::string::size_type acked_msg_begin = ack_str.find(' ');
+          std::string acked_msg = ack_str.substr(acked_msg_begin+1);
+          //std::cout << "acked msg: " << acked_msg << std::endl;
 
-          //int msg_list_idx = std::distance(msg_list.begin(), std::find(msg_list.begin(), msg_list.end(), ack_vec[1]));
+          // get index of msg in msg_list
+          auto acked_msg_it = std::find_if(msg_list.begin(), msg_list.end(), [&acked_msg](const Message& m) {return m.msg == acked_msg;});
 
           if (acked_msg_it != msg_list.end()) {
             auto acked_msg_idx = std::distance(msg_list.begin(), acked_msg_it);
-//          if(msg_list_idx >= msg_list.size()) {
-            //std::cout << "Ack msg " << ack_vec[1] << " not in msg_list" << std::endl;
 
             // remove acked msg from msg_list
             msg_list.erase(msg_list.begin()+acked_msg_idx);
-            //std::cout << "msg_list after removing acked " << ack_vec[1] << ": [";
+            std::cout << "Messages after removing acked " << acked_msg << ": " << msg_list.size() << std::endl;
             //for (auto const& i : msg_list){
-            //  std::cout << i << ", ";
+            //  std::cout << i.msg << ", ";
             //}
             //std::cout << "]" << std::endl;
           }  // end if
