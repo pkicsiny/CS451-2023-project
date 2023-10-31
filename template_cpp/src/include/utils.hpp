@@ -104,7 +104,7 @@ void EncodeAck(const Ack& ack, std::vector<char>& ack_buffer, int sender_pid) {
     size_t ack_size = ack.msg.size();
     uint32_t ack_ser_size = htonl(static_cast<uint32_t>(ack_size));
 
-    std::cout << "Encode ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
+    //std::cout << "Encode ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
 
     // order of serialized Message: [len_msg, msg, sn, pid]
     ack_buffer.insert(ack_buffer.end(), reinterpret_cast<char*>(&ack_ser_size), reinterpret_cast<char*>(&ack_ser_size) + sizeof(uint32_t));
@@ -141,7 +141,7 @@ Ack DecodeAck(const char* ack_buffer, size_t &offset) {  // offset=0 for first c
     ack.pid = ntohl(pid_ser);
     offset += sizeof(uint32_t);
 
-    std::cout << "Decoded ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
+    //std::cout << "Decoded ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
 
     return ack;
 }

@@ -377,7 +377,7 @@ int main(int argc, char **argv) {
       /*-------------------------*/
 
       }else if (r_recv_msg_packet != 0) {
-        std::cout << "[RECV] received bytes: " << r_recv_msg_packet << std::endl;
+        //std::cout << "[RECV] received bytes: " << r_recv_msg_packet << std::endl;
 
         recv_buf[r_recv_msg_packet] = '\0'; //end of line to truncate junk
         std::vector<char> recv_packet(recv_buf, recv_buf + r_recv_msg_packet);
@@ -405,7 +405,7 @@ int main(int argc, char **argv) {
 
           Ack ack(client_pid, msg.sn, msg.msg);
           EncodeAck(ack, ack_packet, client_pid);
-          std::cout << "Encoding ack: " << msg.msg << " pid:" << client_pid<<  " in packet. Num. elements in packet: " << ack_packet.size() << std::endl;
+          //std::cout << "Encoding ack: " << msg.msg << " pid: " << client_pid<<  " in packet. Num. elements in packet: " << ack_packet.size() << std::endl;
 
           /*---------*/
           // deliver //
@@ -439,9 +439,9 @@ int main(int argc, char **argv) {
         if (r_send_ack_packet < 0) {
             std::cout << "Sending ack message failed with error: " << strerror(errno) << std::endl;
         }else{
-          std::cout << "[SEND] sent ack packet with bytes: " << r_send_ack_packet << std::endl;
-          for (auto val : ack_packet) printf("%d ", val);
-          std::cout << "..." << std::endl;
+          //std::cout << "[SEND] sent ack packet with bytes: " << r_send_ack_packet << std::endl;
+          //for (auto val : ack_packet) printf("%d ", val);
+          //std::cout << "..." << std::endl;
         }
       } // if (msg_recv < 0)
     } // while recv
@@ -521,7 +521,7 @@ int main(int argc, char **argv) {
         if (r_send_msg_packet<0){
           std::cout << "Send failed with error: " << strerror(errno) << std::endl;        
         }else{
-          std::cout << "[SEND] sent packet with bytes: " << r_send_msg_packet << std::endl;
+          //std::cout << "[SEND] sent packet with bytes: " << r_send_msg_packet << std::endl;
           //for (auto val : msg_packet) printf("%d ", val);
           //std::cout << "..." << std::endl;
         }
@@ -561,7 +561,7 @@ int main(int argc, char **argv) {
           //std::cout << "[TIMEOUT] recvfrom timed out or no more incoming data: " << strerror(errno) << std::endl;
           break; // terminate while loop i.e. no more ack to receive
         }else if (r_recv_ack_packet != 0) {
-          std::cout << "[RECV] received bytes: " << r_recv_ack_packet << std::endl;
+          //std::cout << "[RECV] received bytes: " << r_recv_ack_packet << std::endl;
 
           /*----------------------*/
           // process acked packet //
@@ -570,8 +570,8 @@ int main(int argc, char **argv) {
           ack_buf[r_recv_ack_packet] = '\0'; //end of line to truncate junk
           std::vector<char> ack_packet(ack_buf, ack_buf + r_recv_ack_packet);
 
-          for (auto val : ack_packet) printf("%d ", val);
-          std::cout <<  "..." << std::endl;
+          //for (auto val : ack_packet) printf("%d ", val);
+          //std::cout <<  "..." << std::endl;
 
           size_t offset = 0;
 
@@ -593,7 +593,7 @@ int main(int argc, char **argv) {
             // remove acked msg from msg_pending_for_ack //
             /*-------------------------------------------*/
 
-            std::cout << "Removing ack message: " << ack_msg << " from pid: "<< ack_pid << " from pending." << std::endl;
+            //std::cout << "Removing ack message: " << ack_msg << " from pid: "<< ack_pid << " from pending." << std::endl;
 
             if (ack_msg_it != msg_pending_for_ack.end()) {
               auto ack_msg_idx = std::distance(msg_pending_for_ack.begin(), ack_msg_it);
@@ -602,8 +602,7 @@ int main(int argc, char **argv) {
           }  // end for ack_packet
         }  // end if (ack_recv < 0)
 
-        std::cout << "msg_list size: " << msg_list.size() << " pending_list size: " << msg_pending_for_ack.size() << std::endl;
-        std::cout << "Num. msg acked in 10 us window: " << prev_size - msg_pending_for_ack.size() << std::endl;
+        std::cout << "[STATUS] msg_list size: " << msg_list.size() << " pending_list size: " << msg_pending_for_ack.size() << " Num. msg acked in 10 us window: " << prev_size - msg_pending_for_ack.size() << std::endl;
       }  // end while recv_ack
 
       /*-------------------------*/
@@ -626,13 +625,13 @@ int main(int argc, char **argv) {
 
           if (msg_idx == MAX_PACKET_SIZE){
             size_t packet_size = resend_packet.size();  // byte size, since sizeof(char)=1
-            std::cout << "Resending packet with size: "<< packet_size << std::endl;
+            //std::cout << "Resending packet with size: "<< packet_size << std::endl;
             int64_t r_resend_msg_packet = sendto(socket_fd, resend_packet.data(), packet_size, 0,
                 reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)); // returns number of characters sent
             if (r_resend_msg_packet<0){
               std::cout << "Send failed with error: " << strerror(errno) << std::endl;
             }else{
-              std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
+              //std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
               //for (auto val : resend_packet) printf("%d ", val);
               //std::cout << "..." << std::endl;
             } 
@@ -653,7 +652,7 @@ int main(int argc, char **argv) {
             if (r_resend_msg_packet<0){
               std::cout << "Send failed with error: " << strerror(errno) << std::endl;
             }else{
-              std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
+              //std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
               //for (auto val : resend_packet) printf("%d ", val);
               //std::cout << "..." << std::endl;
             } 
