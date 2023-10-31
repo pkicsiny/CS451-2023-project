@@ -22,7 +22,7 @@
 #include <limits>
 #include "zlib.h"
 #include <errno.h>
-#define WINDOW_SIZE 1
+#define WINDOW_SIZE 10
 
 /*-------*/
 // begin //
@@ -42,6 +42,16 @@ static void stop(int) {
   std::cout << "Writing output.\n";
   //std::cout << logger_p2p.ss.str() << std::endl;
   logger_p2p.log_delivery();
+
+  int count = 0;
+  std::string line;
+  std::string content = logger_p2p.ss.str();
+  std::istringstream iss(content);
+
+  while (std::getline(iss, line)) {
+        count++;
+  }
+  std::cout << "Number of lines in output: " << count << std::endl;
 
   // exit directly from signal handler
   exit(0);
@@ -345,9 +355,8 @@ int main(int argc, char **argv) {
     sockaddr_in client_addr;
     socklen_t client_addr_size  = sizeof(client_addr);
 
-    char msg_buf[1024];  // buffer for messages
-    MsgPacket packet;  // buffer for received message packet
-    AckPacket* ack_packet = new AckPacket();  // buffer for ack packet
+    char recv_buf[256]; // buffer for messages in bytes
+    std::vector<char> ack_packet;
     std::ostringstream ss_recv;  // stringstream for logging
 
     /*---------------------------------------------*/
@@ -358,39 +367,45 @@ int main(int argc, char **argv) {
     while(true){
 
       // blocking recv
-      int64_t msg_recv = recvfrom(socket_fd, msg_buf, sizeof(msg_buf), 0,
+      int64_t r_recv_msg_packet = recvfrom(socket_fd, recv_buf, sizeof(recv_buf), 0,
           reinterpret_cast<struct sockaddr *>(&client_addr), &client_addr_size);  // returns length of incoming message
-      if (msg_recv < 0) {
+      if (r_recv_msg_packet < 0) {
         std::cout << "Receive failed with error" << std::endl;
 
       /*-------------------------*/
       // process received packet //
       /*-------------------------*/
 
-      }else if (msg_recv != 0) {
+      }else if (r_recv_msg_packet != 0) {
+        std::cout << "[RECV] received bytes: " << r_recv_msg_packet << std::endl;
 
+        recv_buf[r_recv_msg_packet] = '\0'; //end of line to truncate junk
+        std::vector<char> recv_packet(recv_buf, recv_buf + r_recv_msg_packet);
 
-        msg_buf[msg_recv] = '\0'; //end of line to truncate junk
-        memcpy(&packet, msg_buf, msg_recv);
+        //for (auto val : recv_packet) printf("%d ", val);
+        //std::cout <<  "..." << std::endl;
+
+        size_t offset = 0;
+
+        std::vector<Message> msg_recv;
+        while (offset < recv_packet.size()) {
+          msg_recv.push_back(DecodeMessage(recv_packet.data(), offset));
+        }
+
         int client_port = ntohs(client_addr.sin_port); 
         int client_pid = port_pid_dict[client_port];
 
-        std::cout << "successful recv " << packet.msg_idx << " messages from pid: "<< client_pid << std::endl;
-
         // upon successful receive trigger event send ack once, ack is "pid sn msg"
-        ack_packet->ack_idx = packet.msg_idx;
-        for (int i=0; i<packet.msg_idx; i++){
-          std::cout << "msg_idx: "<< i<< std::endl;
-          std::cout << "got msg: " << packet.m_vec[i].msg  << std::endl;
+        ack_packet.clear();
+        for (Message msg: msg_recv){
+
           /*------------------*/
           // build ack packet //
           /*------------------*/
 
-          Message m_i = packet.m_vec[i];
-          AckMessage a_i(client_pid, m_i.sn, m_i.msg);
-          ack_packet->a_vec[i] = a_i;
-
-
+          Ack ack(client_pid, msg.sn, msg.msg);
+          EncodeAck(ack, ack_packet, client_pid);
+          std::cout << "Encoding ack: " << msg.msg << " pid:" << client_pid<<  " in packet. Num. elements in packet: " << ack_packet.size() << std::endl;
 
           /*---------*/
           // deliver //
@@ -398,18 +413,18 @@ int main(int argc, char **argv) {
 
           // pid is not in dict i.e. this is the first msg from proc pid
           if (pid_recv_dict.find(client_pid) == pid_recv_dict.end()) {
-            pid_recv_dict[client_pid].push_back(m_i.msg);
-            logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << m_i.msg << '\n';
+            pid_recv_dict[client_pid].push_back(msg.msg);
+            logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg.msg << '\n';
   
           // pid is already in dict, if msg is duplicate, do not store in log
           } else {
 
             // if this is true msg_buf is not yet in dict[pid]
-            if (std::find(pid_recv_dict[client_pid].begin(), pid_recv_dict[client_pid].end(), m_i.msg) == pid_recv_dict[client_pid].end()){
+            if (std::find(pid_recv_dict[client_pid].begin(), pid_recv_dict[client_pid].end(), msg.msg) == pid_recv_dict[client_pid].end()){
               // msg is not yet in dict so log it
-              pid_recv_dict[client_pid].push_back(m_i.msg);
+              pid_recv_dict[client_pid].push_back(msg.msg);
               // print ss here before and after this line to see each append is successful or not
-              logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << m_i.msg << '\n';
+              logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg.msg << '\n';
             } // end if
           } // end if
         } // end for packet
@@ -417,13 +432,17 @@ int main(int argc, char **argv) {
         /*-----------------*/
         // send ack packet //
         /*-----------------*/
-        size_t ack_packet_size = sizeof(Message)*MAX_PACKET_SIZE + sizeof(int);
-        int64_t msg_ack_send = sendto(socket_fd, reinterpret_cast<const char*>(ack_packet), ack_packet_size, 0,
-            reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr));  // returns number of characters sent
-        if (msg_ack_send < 0) {
-            std::cout << "Sending ack message failed with error: " << strerror(errno) << std::endl;
-        }
 
+        size_t ack_packet_size = ack_packet.size();  // byte size, since sizeof(char)=1
+        int64_t r_send_ack_packet = sendto(socket_fd, ack_packet.data(), ack_packet_size, 0,
+            reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr));  // returns number of characters sent
+        if (r_send_ack_packet < 0) {
+            std::cout << "Sending ack message failed with error: " << strerror(errno) << std::endl;
+        }else{
+          std::cout << "[SEND] sent ack packet with bytes: " << r_send_ack_packet << std::endl;
+          for (auto val : ack_packet) printf("%d ", val);
+          std::cout << "..." << std::endl;
+        }
       } // if (msg_recv < 0)
     } // while recv
  
@@ -467,155 +486,105 @@ int main(int argc, char **argv) {
     size_t prev_size;
     std::cout << "Start sending messages..." << std::endl;
 
-
+    // S.A.R: send, ack, resend
     while(true){
-//    while(!msg_list.empty()){ 
-      
-
-      std::cout << "Number of messages in list to send: " << msg_list.size() << std::endl;
 
       /*------------*/
       // first send //
       /*------------*/
-
-      // with a given window size send message packets
-      for (int w=0; w<WINDOW_SIZE; w++){
         
-        /*------------------------------------------------------------------*/
-        // fill up packet with max 8 messages, or until there are msgs left //
-        /*------------------------------------------------------------------*/
-        MsgPacket* packet = new MsgPacket();
-        packet->msg_idx = 0;
- 
-        // first send
+      int w = 0;
+      while((!msg_list.empty()) & (w<WINDOW_SIZE)){  
+        //std::cout << "First send of messages\n======================= " << std::endl;
+        std::cout << "Number of messages in list to send: " << msg_list.size() << std::endl;
+
+        // fill up packet with max 8 messages, or until there are msgs left 
         std::vector<char> msg_packet;
+        std::vector<Message> tmp_sent;
         int msg_idx = 0;
-        if (!msg_list.empty()){
-          while((packet->msg_idx < MAX_PACKET_SIZE) && !(msg_list.empty())){
-            EncodeMsg(msg_list[0], msg_packet, msg_idx);
-            msg_idx++;
-            msg_list.erase(msg_list.begin());
+        while((msg_idx < MAX_PACKET_SIZE) && !(msg_list.empty())){
+          EncodeMessage(msg_list[0], msg_packet, msg_idx);
+          //std::cout << "Encoding message: " << msg_list[0].msg << " in packet at index " << msg_idx << ". Num. elements in packet: " << msg_packet.size() << std::endl;
+          msg_idx += 1;
+          //std::cout << "After encoding message: " << msg_packet.size() << " msg_idx: " << msg_idx  << std::endl;
+          tmp_sent.push_back(msg_list[0]);
+          msg_list.erase(msg_list.begin());
+        }
+        size_t packet_size = msg_packet.size();  // byte size, since sizeof(char)=1
+      
+        /*-----------------------------------------*/
+        // send msg packet without sequence number //
+        /*-----------------------------------------*/
+
+        int64_t r_send_msg_packet = sendto(socket_fd, msg_packet.data(), packet_size, 0,
+            reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)); // returns number of characters sent
+        if (r_send_msg_packet<0){
+          std::cout << "Send failed with error: " << strerror(errno) << std::endl;        
+        }else{
+          std::cout << "[SEND] sent packet with bytes: " << r_send_msg_packet << std::endl;
+          //for (auto val : msg_packet) printf("%d ", val);
+          //std::cout << "..." << std::endl;
+        }
+ 
+        /*--------------------------------*/
+        // log broadcast after first send //
+        /*--------------------------------*/
+
+        for (Message msg : tmp_sent){
+          if (pid_msg_count_dict[serv_port][msg.sn] == 0){
+            logger_p2p.ss << 'b' << ' ' << msg.msg << '\n';
+
+            // add msg to pending for ack
+            msg_pending_for_ack.push_back(msg);
+          }
+          pid_msg_count_dict[serv_port][msg.sn] += 1;
         }
 
-
-
-
-
-
-
-
-        if (!msg_list.empty()){
-          while((packet->msg_idx < MAX_PACKET_SIZE) && !(msg_list.empty())){
-            Message m_i = msg_list[0];
-            packet->m_vec[packet->msg_idx] = m_i;
-            packet->msg_idx += 1;
-            msg_list.erase(msg_list.begin());
-          }
-          size_t packet_size = sizeof(Message)*MAX_PACKET_SIZE + sizeof(int);
-        
-          for (int i=0; i<packet->msg_idx;i++){
-            std::cout << "messgae: " << packet->m_vec[i].msg << std::endl;
-          }
-          /*-----------------------------------------*/
-          // send msg packet without sequence number //
-          /*-----------------------------------------*/
-
-          int64_t packet_send = sendto(socket_fd, reinterpret_cast<const char*>(packet), packet_size, 0,
-              reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)); // returns number of characters sent
-          if (packet_send<0){
-            std::cout << "Send failed with error: " << strerror(errno) << std::endl;        
-          }
-
-          /*--------------------------------*/
-          // log broadcast after first send //
-          /*--------------------------------*/
-  
-          for (auto i=0; i<packet->msg_idx; i++){
-            Message m_i = packet->m_vec[i];
-            if (pid_msg_count_dict[serv_port][m_i.sn] == 0){
-              logger_p2p.ss << 'b' << ' ' << m_i.msg << '\n';
-  
-              // add msg to pending for ack
-              msg_pending_for_ack.push_back(m_i);
-            }
-            pid_msg_count_dict[serv_port][m_i.sn] += 1;
-          }
-        } // end first send if
-        else if(!(msg_pending_for_ack.empty())){ // resend from pending
-          // TODO: ack_packet already  send from pending list, maybe ack before
-          // TODO: log delivered periodically    
-          MsgPacket packet;
-          packet.msg_idx = 0;
-          for (Message msg : msg_pending_for_ack){
-
-
-
-            packet.m_vec[packet.msg_idx] = msg;
-            packet.msg_idx += 1;
-
-            /*-----------------------*/
-            // send packet when full //
-            /*-----------------------*/
-
-            if (packet.msg_idx == MAX_PACKET_SIZE){
-              size_t packet_size = sizeof(Message)*MAX_PACKET_SIZE + sizeof(int);
-              int64_t packet_send = sendto(socket_fd, reinterpret_cast<const char*>(&packet), packet_size, 0,
-                  reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)); // returns number of characters sent
-              if (packet_send<0){
-                std::cout << "Send failed with error: " << strerror(errno) << std::endl;
-              }
-              packet.msg_idx = 0; // reset packet index to overwrite with new msg
-            } // end if send
-          } // end for messages
-
-          /*---------------------*/
-          // mod MAX_PACKET_SIZE //
-          /*---------------------*/
-
-          if (packet.msg_idx>0){
-              size_t packet_size = sizeof(Message)*MAX_PACKET_SIZE + sizeof(int);
-              int64_t packet_send = sendto(socket_fd, reinterpret_cast<const char*>(&packet), packet_size, 0,
-                  reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)); // returns number of characters sent
-              if (packet_send<0){
-                std::cout << "Send failed with error: " << strerror(errno) << std::endl;
-              }            
-          } // end if residuals
-        } // end if resend unacked
-      } // end for one window
-
-      prev_size = msg_pending_for_ack.size();
-
-      std::cout << "msg_list size: " << msg_list.size() << " pending_list size: " << msg_pending_for_ack.size() << std::endl;
+        w++;
+      } // end while send window
 
       /*----------------------------------------------*/
       // listen to acks, ack is a tuple of (pid, msg) //
       /*----------------------------------------------*/
 
-      std::cout << "Listening to acks..." << std::endl;
-      while(true){
+      while(!(msg_pending_for_ack.empty())){
+        //std::cout << "Listening to acks...\n==========================" << std::endl;
+
+        prev_size = msg_pending_for_ack.size();
 
         // this is blocking so it listens indefinitely; make it nonblocking by setting a timeout
-        AckPacket ack_packet;  // buffer for received message packet
-        char ack_buf[1024];
-        int64_t ack_recv = recvfrom(socket_fd, ack_buf, sizeof(ack_buf), 0,
+        char ack_buf[256];
+        std::vector<char> ack_packet(1024);
+        int64_t r_recv_ack_packet = recvfrom(socket_fd, ack_buf, sizeof(ack_buf), 0,
             reinterpret_cast<struct sockaddr *>(&serv_addr), &serv_addr_size);  // returns length of incoming message
-        if (ack_recv < 0) {
-          std::cout << "Exiting ack loo with error code: " << strerror(errno) << std::endl;
+        if (r_recv_ack_packet < 0) {
+          //std::cout << "[TIMEOUT] recvfrom timed out or no more incoming data: " << strerror(errno) << std::endl;
           break; // terminate while loop i.e. no more ack to receive
-        }else if (ack_recv != 0) {
+        }else if (r_recv_ack_packet != 0) {
+          std::cout << "[RECV] received bytes: " << r_recv_ack_packet << std::endl;
 
           /*----------------------*/
           // process acked packet //
           /*----------------------*/
 
-          ack_buf[ack_recv] = '\0'; //end of line to truncate junk
-          memcpy(&ack_packet, ack_buf, ack_recv);
+          ack_buf[r_recv_ack_packet] = '\0'; //end of line to truncate junk
+          std::vector<char> ack_packet(ack_buf, ack_buf + r_recv_ack_packet);
+
+          for (auto val : ack_packet) printf("%d ", val);
+          std::cout <<  "..." << std::endl;
+
+          size_t offset = 0;
+
+          std::vector<Ack> ack_vec;
+          while (offset < ack_packet.size()) {
+            ack_vec.push_back(DecodeAck(ack_packet.data(), offset));
+          }
+
           int serv_port = ntohs(serv_addr.sin_port);
 
-          for (auto i=0; i<ack_packet.ack_idx; i++){
-            AckMessage a_i = ack_packet.a_vec[i];
-            int ack_pid = a_i.pid;
-            std::string ack_msg = a_i.msg;
+          for (Ack ack : ack_vec){
+            int ack_pid = ack.pid;
+            std::string ack_msg = ack.msg;
           
             // get index of msg in msg_pending_for_ack
             auto ack_msg_it = std::find_if(msg_pending_for_ack.begin(), msg_pending_for_ack.end(), [&ack_msg](const Message& m) {return m.msg == ack_msg;});
@@ -624,20 +593,78 @@ int main(int argc, char **argv) {
             // remove acked msg from msg_pending_for_ack //
             /*-------------------------------------------*/
 
+            std::cout << "Removing ack message: " << ack_msg << " from pid: "<< ack_pid << " from pending." << std::endl;
+
             if (ack_msg_it != msg_pending_for_ack.end()) {
               auto ack_msg_idx = std::distance(msg_pending_for_ack.begin(), ack_msg_it);
               msg_pending_for_ack.erase(msg_pending_for_ack.begin()+ack_msg_idx);
             }
           }  // end for ack_packet
         }  // end if (ack_recv < 0)
-      }  // end while recv
 
-      std::cout << "Num. msg acked in 10 us window: " << prev_size - msg_pending_for_ack.size() << std::endl;
-  }  // end while send
+        std::cout << "msg_list size: " << msg_list.size() << " pending_list size: " << msg_pending_for_ack.size() << std::endl;
+        std::cout << "Num. msg acked in 10 us window: " << prev_size - msg_pending_for_ack.size() << std::endl;
+      }  // end while recv_ack
+
+      /*-------------------------*/
+      // resend unacked messages //
+      /*-------------------------*/
+
+      if(!(msg_pending_for_ack.empty())){
+        //std::cout << "Resending unacked messages\n======================= " << std::endl;
+        // TODO: log delivered periodically    
+
+        std::vector<char> resend_packet;
+        int msg_idx = 0;
+        for (Message msg : msg_pending_for_ack){
+          EncodeMessage(msg, resend_packet, msg_idx);
+          msg_idx += 1;
+
+          /*-----------------------*/
+          // send packet when full //
+          /*-----------------------*/
+
+          if (msg_idx == MAX_PACKET_SIZE){
+            size_t packet_size = resend_packet.size();  // byte size, since sizeof(char)=1
+            std::cout << "Resending packet with size: "<< packet_size << std::endl;
+            int64_t r_resend_msg_packet = sendto(socket_fd, resend_packet.data(), packet_size, 0,
+                reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)); // returns number of characters sent
+            if (r_resend_msg_packet<0){
+              std::cout << "Send failed with error: " << strerror(errno) << std::endl;
+            }else{
+              std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
+              //for (auto val : resend_packet) printf("%d ", val);
+              //std::cout << "..." << std::endl;
+            } 
+            msg_idx = 0; // reset packet index to overwrite with new msg
+            resend_packet.clear();
+          } // end if send
+
+        } // end for messages
+
+        /*---------------------*/
+        // mod MAX_PACKET_SIZE //
+        /*---------------------*/
+
+        if ((msg_idx>0) & (msg_idx<MAX_PACKET_SIZE)){  // this is a packet smaller than MAX_PACKET_SIZE messages
+            size_t packet_size = resend_packet.size();  // byte size, since sizeof(char)=1
+            int64_t r_resend_msg_packet = sendto(socket_fd, resend_packet.data(), packet_size, 0,
+                reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)); // returns number of characters sent
+            if (r_resend_msg_packet<0){
+              std::cout << "Send failed with error: " << strerror(errno) << std::endl;
+            }else{
+              std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
+              //for (auto val : resend_packet) printf("%d ", val);
+              //std::cout << "..." << std::endl;
+            } 
+        } // end if residuals
+      } // end if resend unacked
+
+    }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;
 
-}  // end if
+  } // end if server/client
 
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.
