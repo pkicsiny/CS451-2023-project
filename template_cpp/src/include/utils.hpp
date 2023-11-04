@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #define MAX_MSG_LENGTH_BYTES = 255;  // 256th is 0 terminator
+#define MAX_PACKET_SIZE 8
 
 class Message {
   public:
@@ -146,6 +147,12 @@ Ack DecodeAck(const char* ack_buffer, size_t &offset) {  // offset=0 for first c
     return ack;
 }
 
+struct LogMessage {
+  char msg_type;
+  int sender_pid;
+  Message m; 
+};
+
 class Logger {
   public:
     const char* output_path;
@@ -154,6 +161,9 @@ class Logger {
 
     Logger ();
     Logger (const char*);
+
+    int lm_idx;
+    LogMessage* lm_buffer;
 
     int log_delivery(){
     
@@ -171,19 +181,29 @@ class Logger {
       }
     }
 
+    void log_lm_buffer(){
+
+      // log into
+      std::ofstream output_file;
+      output_file.open(output_path, std::ios_base::app);
+
+      if (output_file.is_open()){
+        for(int i = 0; i < lm_idx; i++) {
+          if(lm_buffer[i].msg_type == 'b'){
+            output_file << "b " << lm_buffer[i].m.msg << std::endl;
+          }else{
+            output_file << "d " << lm_buffer[i].sender_pid << ' ' << lm_buffer[i].m.msg << std::endl;
+          }
+        }
+        lm_idx = 0;
+        output_file.close();
+      }else{
+        std::cout << "Could not open output file: " << output_path << std::endl;
+      }
+    }
 };
 
-#define MAX_PACKET_SIZE 8
 
-struct MsgPacket{
-  int msg_idx;  
-  Message m_vec[MAX_PACKET_SIZE];
-};
-
-struct AckPacket{
-  int ack_idx;
-  Ack a_vec[MAX_PACKET_SIZE];
-};
 
 Logger::Logger(){
 }
