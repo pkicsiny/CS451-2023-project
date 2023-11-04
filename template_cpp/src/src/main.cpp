@@ -20,7 +20,6 @@
 
 #include <map>
 #include <limits>
-#include "zlib.h"
 #include <errno.h>
 #define WINDOW_SIZE 10
 
