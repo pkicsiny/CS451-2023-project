@@ -10,8 +10,9 @@
 #include <cstring>
 #include <unistd.h>
 
-#define MAX_MSG_LENGTH_BYTES = 255;  // 256th is 0 terminator
-#define MAX_PACKET_SIZE 8
+#define MAX_MSG_LIST_SIZE 1 // >0 this is there so that I can send MAX_INT wo filling up the RAM
+#define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
+#define MAX_PACKET_SIZE 8  // fixed by assignment
 
 class Message {
   public:
@@ -25,14 +26,31 @@ class Message {
     }
 };
 
-// for assignment full msg size is: 4+4+4+4=16 bytes
+
+struct MessageList{
+  std::vector<Message> msg_list;
+  int sn_idx;
+  int msg_remaining;
+
+  // this is there so that I can send MAX_INT wo filling up the RAM
+  void refill(){
+    int msg_list_chunk_size = std::min(MAX_MSG_LIST_SIZE, msg_remaining);
+    for(auto ii=0; ii<msg_list_chunk_size; ii++){
+      msg_list.push_back(Message(sn_idx, std::to_string(sn_idx+1)));  // sequencing starts from 0
+      sn_idx++;  // goes up to NUM_MSG
+      msg_remaining--;  // goes down to 0
+    }
+    //std::cout << "Message list refilled with " << msg_list.size() << " messages." << std::endl;
+  }
+};
+
+// for assignment full msg size is: 4+x+4=12 8+x bytes
 // serialize a single message into msg_buffer which contains all msg in packet
 void EncodeMessage(const Message& msg, std::vector<char>& msg_buffer, int packet_idx);
 void EncodeMessage(const Message& msg, std::vector<char>& msg_buffer, int packet_idx) {
 
     // serialize the sequence number to network byte order
     uint32_t sn_ser = htonl(msg.sn);  // 4 bytes encoding seq. num.; seq. num is max. MAX_INT so 4 bytes needed
-//    uint32_t packet_idx_ser = htonl(packet_idx);  // 1 byte encoding packet idx (max. 8)
 
     // serialize the message string
     const char* msg_ser = msg.msg.data();  // 1 byte per character, pointer to byte repr. of msg
@@ -41,14 +59,12 @@ void EncodeMessage(const Message& msg, std::vector<char>& msg_buffer, int packet
 
     //std::cout << "encoding msg: " << msg.msg << std::endl;
 
-    // order of serialized Message: [len_msg, msg, sn, packet_idx]
+    // order of serialized Message: [len_msg, msg, sn]
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&msg_ser_size), reinterpret_cast<char*>(&msg_ser_size) + sizeof(uint32_t));  // 4 bytes
 //    std::cout << "msg_buffer after encoding msg_size: " << msg_buffer.size() << " bytes" << std::endl;
     msg_buffer.insert(msg_buffer.end(), msg_ser, msg_ser + msg_size);  // 1 byte
 //    std::cout << "msg_buffer after encoding msg: " << msg_buffer.size() << " bytes" << std::endl;
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&sn_ser), reinterpret_cast<char*>(&sn_ser) + sizeof(uint32_t));  // 4 bytes
-//    msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&packet_idx_ser), reinterpret_cast<char*>(&packet_idx_ser) + sizeof(uint32_t));
-
 //    std::cout << "msg_buffer after encoding sn: " << msg_buffer.size() << " bytes" << std::endl;
 }
 
@@ -70,12 +86,6 @@ Message DecodeMessage(const char* msg_buffer, size_t &offset) {  // offset=0 for
     std::memcpy(&(msg.sn), msg_buffer + offset, sizeof(uint32_t));
     msg.sn = ntohl(msg.sn);
     offset += sizeof(uint32_t);
-
-    // decocde packet_idx
-    //uint32_t packet_idx_ser;
-    //std::memcpy(&(packet_idx_ser), msg_buffer, sizeof(uint32_t));
-    //int packet_idx = ntohl(packet_idx_ser);
-    //offset += sizeof(uint32_t);
 
     return msg;
 }

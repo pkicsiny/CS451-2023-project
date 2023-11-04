@@ -16,13 +16,15 @@
 #include <arpa/inet.h> 
 #include <sys/socket.h> 
 #include <unistd.h> 
+#include "assert.h"
 #define _XOPEN_SOURCE_EXTENDED 1
 
 #include <map>
 #include <limits>
 #include <errno.h>
 #define WINDOW_SIZE 10
-#define MAX_LINES_LOG 100
+#define MAX_LOG_PERIOD 100
+#define MAX_MSG_SN 2147483646  // fixed by assignment, max_int-1 32 bit
 
 /*-------*/
 // begin //
@@ -112,7 +114,7 @@ int main(int argc, char **argv) {
 
   logger_p2p.output_path = parser.outputPath();
   std::cout << "Initialized logger at: " << logger_p2p.output_path << std::endl;
-  logger_p2p.lm_buffer = new LogMessage[MAX_LINES_LOG];
+  logger_p2p.lm_buffer = new LogMessage[MAX_LOG_PERIOD];
   logger_p2p.lm_idx = 0;
 
   /*--------------------*/
@@ -135,7 +137,8 @@ int main(int argc, char **argv) {
   // read config file //
   /*------------------*/
 
-  std::vector<Message> msg_list;
+  MessageList msg_list;
+  msg_list.sn_idx = 0;
 
   int NUM_MSG = -1, SERV_PID = -1;
   if (requireConfig){
@@ -151,6 +154,7 @@ int main(int argc, char **argv) {
       }
       NUM_MSG = config_file_content_vec[0];  // num messages sent by each process
       SERV_PID = config_file_content_vec[1];  // server process
+      assert(NUM_MSG<=MAX_MSG_SN+1);
       config_file.close();
     }else{
       std::cout << "Could not open config file: " << parser.configPath() << std::endl;
@@ -161,11 +165,8 @@ int main(int argc, char **argv) {
       return -1;
     }else{
       std::cout << "Config successfully read. Send " << NUM_MSG << " messages to process " << SERV_PID << std::endl;
-
-      // this bit is adapted to the config but msg_list could be filled up differently
-      for (int i=0; i<NUM_MSG; i++){
-        msg_list.push_back(Message(i, std::to_string(i+1)));  // sequencing starts from 0
-      }
+      msg_list.msg_remaining = NUM_MSG;
+      if (my_pid != SERV_PID){msg_list.refill();}
     }
   }else{  // if no config, read from inout stream or something
     SERV_PID = 1;
@@ -200,18 +201,23 @@ int main(int argc, char **argv) {
 
       // cin the UNIQUE messages and push back to msg_list; one msg is the full line
       std::string msg_cin_buf;
+      msg_list.msg_remaining = NUM_MSG;
+
       for (int i=0; i<NUM_MSG; i++){
         std::cout << "Message " << i+1 << ": ";
         std::getline(std::cin, msg_cin_buf);
 
         // msg_list has to be unique, keep while msg_cin_buf is in msg_list
-        while (std::find_if(msg_list.begin(), msg_list.end(), [&msg_cin_buf](const Message& m) {return m.msg == msg_cin_buf;}) != msg_list.end()){
+        while (std::find_if(msg_list.msg_list.begin(), msg_list.msg_list.end(), [&msg_cin_buf](const Message& m) {return m.msg == msg_cin_buf;}) != msg_list.msg_list.end()){
   
           // ask again
           std::cout << "Message " << i+1 << ": ";
           std::getline(std::cin, msg_cin_buf);
         }  
-        msg_list.push_back(Message(i, msg_cin_buf));  // sequencing starts from 0
+
+        msg_list.msg_list.push_back(Message(msg_list.sn_idx, msg_cin_buf));  // sequencing starts from 0
+        msg_list.sn_idx++;
+        msg_list.msg_remaining--;
       }
     }
   }
@@ -308,7 +314,7 @@ int main(int argc, char **argv) {
       if (r_recv_msg_packet < 0) {
         std::cout << "Receive failed with error" << std::endl;
       }else if (r_recv_msg_packet != 0) {
-        std::cout << "[RECV] received bytes: " << r_recv_msg_packet << std::endl;
+        //std::cout << "[RECV] received bytes: " << r_recv_msg_packet << std::endl;
 
         recv_buf[r_recv_msg_packet] = '\0'; //end of line to truncate junk
         std::vector<char> recv_packet(recv_buf, recv_buf + r_recv_msg_packet);
@@ -351,7 +357,7 @@ int main(int argc, char **argv) {
             lm.msg_type = 'd';
             logger_p2p.lm_buffer[logger_p2p.lm_idx] = lm;
             logger_p2p.lm_idx++;
-            if(logger_p2p.lm_idx == MAX_LINES_LOG){
+            if(logger_p2p.lm_idx == MAX_LOG_PERIOD){
               logger_p2p.log_lm_buffer();
             }                                              
 
@@ -369,7 +375,7 @@ int main(int argc, char **argv) {
               lm.msg_type = 'd';
               logger_p2p.lm_buffer[logger_p2p.lm_idx] = lm;
               logger_p2p.lm_idx++;
-              if(logger_p2p.lm_idx == MAX_LINES_LOG){
+              if(logger_p2p.lm_idx == MAX_LOG_PERIOD){
                 logger_p2p.log_lm_buffer();
               }
 
@@ -388,7 +394,7 @@ int main(int argc, char **argv) {
         if (r_send_ack_packet < 0) {
             std::cout << "Sending ack message failed with error: " << strerror(errno) << std::endl;
         }else{
-          std::cout << "[SEND] sent ack packet with bytes: " << r_send_ack_packet << std::endl;
+          //std::cout << "[SEND] sent ack packet with bytes: " << r_send_ack_packet << std::endl;
           //for (auto val : ack_packet) printf("%d ", val);
           //std::cout << "..." << std::endl;
         }
@@ -442,32 +448,42 @@ int main(int argc, char **argv) {
       /*------------*/
       // first send //
       /*------------*/
-        
+      
+      // wait before resend
+      if (msg_list.msg_list.empty()){
+        usleep(1000);
+      }
+ 
       int w = 0;
-      while((!msg_list.empty()) & (w<WINDOW_SIZE)){  
-        std::cout << "Number of messages in list to send: " << msg_list.size() << std::endl;
+      while((!msg_list.msg_list.empty()) & (w<WINDOW_SIZE)){  
+        //std::cout << "Number of messages in list to send: " << msg_list.msg_list.size() << "=========================" << std::endl;
 
         // fill up packet with max 8 messages, or until there are msgs left 
         std::vector<char> msg_packet;
         int msg_idx = 0;
-        while((msg_idx < MAX_PACKET_SIZE) && !(msg_list.empty())){
-          EncodeMessage(msg_list[0], msg_packet, msg_idx);
-          std::cout << "Encoding message: " << msg_list[0].msg << " in packet at index " << msg_idx << ". Num. elements in packet: " << msg_packet.size() << std::endl;
+        while((msg_idx < MAX_PACKET_SIZE) && !(msg_list.msg_list.empty())){
+          EncodeMessage(msg_list.msg_list[0], msg_packet, msg_idx);
+          //std::cout << "Encoding message: " << msg_list.msg_list[0].msg << " in packet at index " << msg_idx << ". Num. elements in packet: " << msg_packet.size() << std::endl;
           msg_idx += 1;
           //std::cout << "After encoding message: " << msg_packet.size() << " msg_idx: " << msg_idx  << std::endl;
 
           // log boradcast event of single message
           LogMessage lm;
-          lm.m = msg_list[0];
+          lm.m = msg_list.msg_list[0];
           lm.sender_pid = my_pid;
           lm.msg_type = 'b';
           logger_p2p.lm_buffer[logger_p2p.lm_idx] = lm;
           logger_p2p.lm_idx++;
-          if(logger_p2p.lm_idx == MAX_LINES_LOG){
+          if(logger_p2p.lm_idx == MAX_LOG_PERIOD){
             logger_p2p.log_lm_buffer();
           }
-          logger_p2p.msg_pending_for_ack.push_back(msg_list[0]);
-          msg_list.erase(msg_list.begin());
+          logger_p2p.msg_pending_for_ack.push_back(msg_list.msg_list[0]);
+          msg_list.msg_list.erase(msg_list.msg_list.begin());
+
+          // if msg list empty dont exit but fill up with next chunk if there are rmng msg
+          if ((msg_list.msg_list.empty()) & (msg_list.msg_remaining!=0)){
+            msg_list.refill();
+          }
         }
 
         size_t packet_size = msg_packet.size();  // byte size, since sizeof(char)=1
@@ -476,9 +492,9 @@ int main(int argc, char **argv) {
         if (r_send_msg_packet<0){
           std::cout << "Send failed with error: " << strerror(errno) << std::endl;        
         }else{
-          std::cout << "[SEND] sent packet with bytes: " << r_send_msg_packet << std::endl;
-          for (auto val : msg_packet) printf("%d ", val);
-          std::cout << "..." << std::endl;
+          //std::cout << "[SEND] sent packet with bytes: " << r_send_msg_packet << std::endl;
+          //for (auto val : msg_packet) printf("%d ", val);
+          //std::cout << "..." << std::endl;
         }
         w++;
       } // end while send window
@@ -488,7 +504,7 @@ int main(int argc, char **argv) {
       /*----------------------------------------------*/
 
       while(!(logger_p2p.msg_pending_for_ack.empty())){
-        std::cout << "Listening to acks...\n==========================" << std::endl;
+        //std::cout << "Listening to acks...\n==========================" << std::endl;
 
         prev_size = logger_p2p.msg_pending_for_ack.size();
 
@@ -500,7 +516,7 @@ int main(int argc, char **argv) {
           //std::cout << "[TIMEOUT] recvfrom timed out or no more incoming data: " << strerror(errno) << std::endl;
           break; // terminate while loop i.e. no more ack to receive
         }else if (r_recv_ack_packet != 0) {
-          std::cout << "[RECV] received bytes: " << r_recv_ack_packet << std::endl;
+          //std::cout << "[RECV] received bytes: " << r_recv_ack_packet << std::endl;
 
           /*----------------------*/
           // process acked packet //
@@ -541,7 +557,7 @@ int main(int argc, char **argv) {
           }  // end for ack_packet
         }  // end if (ack_recv < 0)
 
-        std::cout << "[STATUS] msg_list size: " << msg_list.size() << " pending_list size: " << logger_p2p.msg_pending_for_ack.size() << " Num. msg acked in 10 us window: " << prev_size - logger_p2p.msg_pending_for_ack.size() << std::endl;
+        //std::cout << "[STATUS] msg_list size: " << msg_list.msg_list.size() << " pending_list size: " << logger_p2p.msg_pending_for_ack.size() << " Num. msg acked in 10 us window: " << prev_size - logger_p2p.msg_pending_for_ack.size() << std::endl;
       }  // end while recv_ack
 
       /*-------------------------*/
@@ -549,7 +565,7 @@ int main(int argc, char **argv) {
       /*-------------------------*/
 
       if(!(logger_p2p.msg_pending_for_ack.empty())){
-        std::cout << "Resending unacked messages\n======================= " << std::endl;
+        //std::cout << "Resending unacked messages\n======================= " << std::endl;
 
         std::vector<char> resend_packet;
         int msg_idx = 0;
@@ -569,7 +585,7 @@ int main(int argc, char **argv) {
             if (r_resend_msg_packet<0){
               std::cout << "Send failed with error: " << strerror(errno) << std::endl;
             }else{
-              std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
+              //std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
               //for (auto val : resend_packet) printf("%d ", val);
               //std::cout << "..." << std::endl;
             } 
@@ -590,7 +606,7 @@ int main(int argc, char **argv) {
             if (r_resend_msg_packet<0){
               std::cout << "Send failed with error: " << strerror(errno) << std::endl;
             }else{
-              std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
+              //std::cout << "[SEND] resent packet with bytes: " << r_resend_msg_packet << std::endl;
               //for (auto val : resend_packet) printf("%d ", val);
               //std::cout << "..." << std::endl;
             } 
