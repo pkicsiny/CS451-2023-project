@@ -150,6 +150,7 @@ class Logger {
   public:
     const char* output_path;
     std::ostringstream ss;
+    std::vector<Message> msg_pending_for_ack; 
 
     Logger ();
     Logger (const char*);
