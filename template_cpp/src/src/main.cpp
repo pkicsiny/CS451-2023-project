@@ -391,6 +391,9 @@ int main(int argc, char **argv) {
   }else{
     std::cout << "---I am a client---" << std::endl;
 
+    // sleep 1 ms to wait receiver processes to set up
+    usleep(1000);
+
     // AF_INET: IPv4, SOCK_DGRAM: UDP/IP
     if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
         std::cout << "[ERROR] socket()" << socket_fd << std::endl;
