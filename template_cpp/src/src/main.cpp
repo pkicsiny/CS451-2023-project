@@ -22,6 +22,7 @@
 #include <map>
 #include <limits>
 #include <errno.h>
+#include <unordered_set>
 #define WINDOW_SIZE 100
 #define MAX_LOG_PERIOD 100
 #define MAX_MSG_SN 2147483646  // fixed by assignment, max_int-1 32 bit
@@ -108,7 +109,7 @@ int main(int argc, char **argv) {
   // init process-received message dict //
   /*------------------------------------*/
 
-  std::map<int64_t, std::vector<std::string>> pid_recv_dict;
+  std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
 
   /*------------------*/
   // read config file //
@@ -328,7 +329,7 @@ int main(int argc, char **argv) {
 
           // pid is not in dict i.e. this is the first msg from proc pid
           if (pid_recv_dict.find(client_pid) == pid_recv_dict.end()) {
-            pid_recv_dict[client_pid].push_back(msg.msg);
+            pid_recv_dict[client_pid].insert(msg.msg);
             //logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg.msg << '\n';
             LogMessage lm;
             lm.m = msg;
@@ -344,9 +345,10 @@ int main(int argc, char **argv) {
           } else {
 
             // if this is true msg_buf is not yet in dict[pid]
-            if (std::find(pid_recv_dict[client_pid].begin(), pid_recv_dict[client_pid].end(), msg.msg) == pid_recv_dict[client_pid].end()){
+            //if (std::find(pid_recv_dict[client_pid].begin(), pid_recv_dict[client_pid].end(), msg.msg) == pid_recv_dict[client_pid].end()){
+            if (pid_recv_dict[client_pid].find(msg.msg) == pid_recv_dict[client_pid].end()){
               // msg is not yet in dict so log it
-              pid_recv_dict[client_pid].push_back(msg.msg);
+              pid_recv_dict[client_pid].insert(msg.msg);
               //logger_p2p.ss << 'd' << ' ' << client_pid << ' ' << msg.msg << '\n';
               LogMessage lm;
               lm.m = msg;
