@@ -10,7 +10,7 @@
 #include <cstring>
 #include <unistd.h>
 
-#define MAX_MSG_LIST_SIZE 1000 // >0 this is there so that I can send MAX_INT wo filling up the RAM
+#define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 

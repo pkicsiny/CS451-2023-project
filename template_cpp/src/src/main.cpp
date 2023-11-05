@@ -23,7 +23,7 @@
 #include <limits>
 #include <errno.h>
 #include <unordered_set>
-#define WINDOW_SIZE 100
+#define WINDOW_SIZE 50
 #define MAX_LOG_PERIOD 100
 #define MAX_MSG_SN 2147483646  // fixed by assignment, max_int-1 32 bit
 
