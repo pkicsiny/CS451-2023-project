@@ -10,7 +10,7 @@
 #include <cstring>
 #include <unistd.h>
 
-#define MAX_MSG_LIST_SIZE 1 // >0 this is there so that I can send MAX_INT wo filling up the RAM
+#define MAX_MSG_LIST_SIZE 1000 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
@@ -24,6 +24,13 @@ class Message {
       sn = sequencenumber;
       msg = message;
     }
+
+    // compare 2 messages
+    bool operator==(const Message &m) const {return ((sn == m.sn) && (msg == m.msg));}
+    bool operator<(const Message &m) const {return sn < m.sn;}
+
+    // compare a string to the message, this is used to remove acked from pending
+    bool operator==(const std::string ack_msg) const {return ((msg == ack_msg) && (msg == ack_msg));}
 };
 
 
@@ -103,6 +110,13 @@ class Ack {
       sn = sequencenumber;
       msg = message;
     }
+
+    // compare 2 ack messages
+    bool operator==(const Ack &a) const {return ((sn == a.sn) && (msg == a.msg) && (pid == a.pid));}
+    bool operator<(const Ack &a) const {return sn < a.sn;}
+
+    // compare an ack message with a message
+    bool operator==(const Message &m) const {return ((sn == m.sn) && (msg == m.msg));}
 };
 
 // serialize a single message into msg_buffer which contains all msg in packet
@@ -221,3 +235,4 @@ Logger::Logger(){
 Logger::Logger(const char* op){
   output_path = op;
 }
+
