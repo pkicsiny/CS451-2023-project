@@ -257,7 +257,9 @@ int main(int argc, char **argv) {
 
     // init with 0s
     std::memset(reinterpret_cast<struct sockaddr *>(&serv_addr), 0, sizeof(serv_addr));
-                                                                                                        /* setup the host_addr structure for use in bind call */
+
+    /* setup the host_addr structure for use in bind call */
+
     // server byte order
     serv_addr.sin_family = AF_INET; 
                                                                                                                      
