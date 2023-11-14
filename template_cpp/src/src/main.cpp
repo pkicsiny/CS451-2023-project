@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
   /*---------------*/
 
   int socket_fd;
-  struct sockaddr_in serv_addr;
+  struct sockaddr_in to_addr;  // other process address
 
   // recv timeout
   struct timeval read_timeout;
@@ -246,111 +246,52 @@ int main(int argc, char **argv) {
   // on senders (clients): create a socket and bind (assign address) this socket to the receiver
   // on receiver (server): create a socket and listen for incoming events
 
-  /*--------*/
-  // server //
-  /*--------*/
+  /*-----------*/
+  // main loop //
+  /*-----------*/
 
-  if (my_pid == SERV_PID){
-    std::cout << "---I am the server---" << std::endl;
+  // my socket: AF_INET: IPv4, SOCK_DGRAM: UDP/IP
+  if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
+      std::cout << "[ERROR] socket()" << socket_fd << std::endl;
+      return -1; 
+  }
+  sockaddr_in my_addr;
+  my_addr.sin_family = AF_INET; 
+  my_addr.sin_addr.s_addr = INADDR_ANY; //inet_addr(my_ip); //INADDR_ANY;  
+  my_addr.sin_port = htons(my_port);  // port of my process
+  std::cout << "Client port: " << my_port << " " << my_addr.sin_port << " size: " << sizeof(my_addr) << std::endl;
+  if (int bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&my_addr), sizeof(my_addr)) < 0){
+    std::cout << "[ERROR] bind(): " << strerror(errno) << std::endl;
+    return -1;     
+  }
 
-    // AF_INET: IPv4, SOCK_DGRAM: UDP/IP
-    if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
-        std::cout << "[ERROR] socket()" << socket_fd << std::endl;
-        return -1; 
+  // set timeout on my socket
+  setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
+
+  // S.A.R: send, ack, resend
+  std::cout << "Start sending messages..." << std::endl;
+  while(true){
+
+    for (auto &host : hosts) {
+
+      // config other address
+      to_addr.sin_family = AF_INET; 
+      to_addr.sin_addr.s_addr = inet_addr(host.ipReadable().c_str()); //INADDR_ANY;  
+      to_addr.sin_port = htons(host.port);  // port of receiving process
+      std::cout << "Send to: (machine readable) IP: " << to_addr.sin_addr.s_addr << ", (human readable) port: " << to_addr.sin_port <<  std::endl;
+
+      pl.send(msg_list, logger_p2p, socket_fd, to_addr); // send some messages once
     }
 
-    // init with 0s
-    std::memset(reinterpret_cast<struct sockaddr *>(&serv_addr), 0, sizeof(serv_addr));
+    pl.recv_ack(logger_p2p, socket_fd, to_addr); // wait for acks until queue empty
+    pl.resend(logger_p2p, socket_fd, to_addr); // resend all unacked messages once
+    pl.recv(logger_p2p, socket_fd, to_addr); // receive messages from other process
 
-    /* setup the host_addr structure for use in bind call */
-
-    // server byte order
-    serv_addr.sin_family = AF_INET; 
-                                                                                                                     
-    // automatically be filled with current host's IP address
-    serv_addr.sin_addr.s_addr = INADDR_ANY; //inet_addr(serv_ip); //INADDR_ANY;  
-                                                                                                                     
-    // convert short integer value for port must be converted into network byte order
-    serv_addr.sin_port = htons(serv_port);  // port of server process
-    std::cout << "server port: " << htons(serv_port) << " " << serv_addr.sin_port <<  std::endl;
-                                                                                                                     
-    // bind socket to server address
-    if (int bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)) < 0){
-      std::cout << "[ERROR] bind(): " << bind_return << std::endl;
-      return -1;     
-    }
-    
-    // client address
-    sockaddr_in client_addr;
-    socklen_t client_addr_size  = sizeof(client_addr);
-
-    /*---------------------------------------------*/
-    // wait for messages incoming to server's port //
-    /*---------------------------------------------*/
-
-    std::cout << "Waiting to receive messages..." << std::endl;
-    while(true){
-
-      pl.recv(logger_p2p, socket_fd, client_addr);
-
-    } // while recv
- 
-  /*--------*/
-  // client //
-  /*--------*/
-
-  }else{
-    std::cout << "---I am a client---" << std::endl;
-
-    // sleep 1 ms to wait receiver processes to set up
-    usleep(1000);
-
-    // AF_INET: IPv4, SOCK_DGRAM: UDP/IP
-    if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
-        std::cout << "[ERROR] socket()" << socket_fd << std::endl;
-        return -1; 
-    }
-
-    std::cout << "Configuring server address..." << std::endl;
-    serv_addr.sin_family = AF_INET; 
-    serv_addr.sin_addr.s_addr = inet_addr(serv_ip); //INADDR_ANY;  
-    serv_addr.sin_port = htons(serv_port);  // port of server procesr
-    std::cout << "Server address successfully configured. (machine readable) IP: " << serv_addr.sin_addr.s_addr << ", (human readable) port: " << serv_addr.sin_port <<  std::endl;
-
-    // bind client address, otherwise process uses a random port to sent msg
-    sockaddr_in client_addr;
-    client_addr.sin_family = AF_INET; 
-    client_addr.sin_addr.s_addr = INADDR_ANY; //inet_addr(my_ip); //INADDR_ANY;  
-    client_addr.sin_port = htons(my_port);  // port of my process
-    std::cout << "Client port: " << my_port << " " << client_addr.sin_port << " size: " << sizeof(client_addr) << std::endl;
-    if (int bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&client_addr), sizeof(client_addr)) < 0){
-      std::cout << "[ERROR] bind(): " << strerror(errno) << std::endl;
-      return -1;     
-    }
-
-    // set timeout on socket
-    setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
-
-    std::ostringstream ss_send;
-  
-    std::cout << "Start sending messages..." << std::endl;
-
-    // S.A.R: send, ack, resend
-    while(true){
-
-      pl.send(msg_list, logger_p2p, socket_fd, serv_addr); // send some messages once
-      pl.recv_ack(logger_p2p, socket_fd, serv_addr); // wait for acks until queue empty
-      pl.resend(logger_p2p, socket_fd, serv_addr); // resend all unacked messages once
-
-      // TODO: make one recv function instead of recv_ack and recv, deliver depending on msg type
-      // TODO: make one type of message class, remove ackmessage, denote ack as a boolean
-      // TODO: make utils.cpp
-
-    }  // end while send
+    // TODO: make one recv function instead of recv_ack and recv, deliver depending on msg type
+    // TODO: make one type of message class, remove ackmessage, denote ack as a boolean
+  }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;
-
-  } // end if server/client
 
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.
