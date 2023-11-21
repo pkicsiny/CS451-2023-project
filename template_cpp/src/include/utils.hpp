@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+#include <map>
 
 #define MAX_LOG_PERIOD 100
 #define WINDOW_SIZE 50
@@ -17,17 +18,19 @@
 
 class Message {
   public:
+    int b_pid;  // pid of original broadcaster
     int sn;  // sequence number
     std::string msg;  // actual message string  
+    int is_ack;  // 0 for no, 1 for yes
 
     Message();
-    Message(int, std::string);
+    Message(int, int, std::string, int);
 
     // compare 2 messages
-    bool operator==(const Message &m) const {return ((sn == m.sn) && (msg == m.msg));}
+    bool operator==(const Message &m) const {return ((b_pid == m.b_pid) && (sn == m.sn) && (msg == m.msg));}
     bool operator<(const Message &m) const {return sn < m.sn;}
 
-    // compare a string to the message, this is used to remove acked from pending
+    // compare a string to this message, this is used to remove acked from pending
     bool operator==(const std::string ack_msg) const {return ((msg == ack_msg) && (msg == ack_msg));}
 };
 
@@ -38,7 +41,7 @@ struct MessageList{
   int msg_remaining;
 
   // this is there so that I can send MAX_INT wo filling up the RAM
-  void refill();
+  void refill(int, int);
 };
 
 // for assignment full msg size is: 4+x+4=12 8+x bytes
@@ -49,6 +52,7 @@ Message DecodeMessage(const char*, size_t &);
 class Ack {
   public:
     int pid;  // process id of sender
+    int b_pid;  // pid of original broadcaster
     int sn;  // sequence number
     std::string msg;  // actual message string  
 
@@ -56,7 +60,7 @@ class Ack {
     Ack(int, int, std::string);
 
     // compare 2 ack messages
-    bool operator==(const Ack &a) const {return ((sn == a.sn) && (msg == a.msg) && (pid == a.pid));}
+    bool operator==(const Ack &a) const {return ((b_pid == a.b_pid) && (sn == a.sn) && (msg == a.msg) && (pid == a.pid));}
     bool operator<(const Ack &a) const {return sn < a.sn;}
 
     // compare an ack message with a message
@@ -77,7 +81,7 @@ class Logger {
   public:
     const char* output_path;
     std::ostringstream ss;
-    std::vector<Message> msg_pending_for_ack; 
+    std::map<int, std::vector<Message>> msg_pending_for_ack; 
 
     Logger ();
     Logger (const char*);

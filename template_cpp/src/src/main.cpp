@@ -34,6 +34,7 @@
 Logger logger_p2p;
 std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
 std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+std::vector<Parser::Host> hosts;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -43,7 +44,7 @@ static void stop(int) {
   std::cout << "Immediately stopping network packet processing.\n";
   std::cout << "Writing output.\n";
   logger_p2p.log_lm_buffer();
-  std::cout << "[PENDING] " << logger_p2p.msg_pending_for_ack.size() << std::endl;
+  //std::cout << "[PENDING] " << logger_p2p.msg_pending_for_ack.size() << std::endl;
 
   // exit directly from signal handler
   exit(0);
@@ -99,27 +100,30 @@ int main(int argc, char **argv) {
   // init port-pid dict //
   /*--------------------*/
 
-  auto hosts = parser.hosts();
+  hosts = parser.hosts();
+  unsigned int n_procs = 0;
+
  // std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
   for (auto &host : hosts) {
     port_pid_dict[host.port] = static_cast<int>(host.id);
+    n_procs++;
     //std::cout << "port: " << host.port << ": process ID " << port_pid_dict[host.port] << std::endl;
   }
+  std::cout << "there are " << n_procs << " processes in the execution." << std::endl;
 
-  /*------------------------------------*/
-  // init process-received message dict //
-  /*------------------------------------*/
-
-  //std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
 
   /*------------------*/
   // read config file //
   /*------------------*/
 
-  MessageList msg_list;
-  msg_list.sn_idx = 0;
+  std::map<int, MessageList> msg_list_vec;
+  unsigned int p = 1;
+  while (p<=n_procs){
+    msg_list_vec[p].sn_idx = 0;
+    p++;
+  }
 
-  int NUM_MSG = -1, SERV_PID = -1;
+  int NUM_MSG = -1;
   if (requireConfig){
     std::string l_in;
     std::ifstream config_file;
@@ -132,7 +136,6 @@ int main(int argc, char **argv) {
         config_file_content_vec.push_back(std::stoi(l_in));
       }
       NUM_MSG = config_file_content_vec[0];  // num messages sent by each process
-      SERV_PID = config_file_content_vec[1];  // server process
       assert(NUM_MSG<=MAX_MSG_SN+1);
       config_file.close();
     }else{
@@ -140,65 +143,76 @@ int main(int argc, char **argv) {
       return -1;
     }
     
-    if (NUM_MSG == -1 || SERV_PID == -1){
-      std::cout << "[ERROR] Reading config failed. NUM_MSG: " << NUM_MSG << ", SERV_PID: " << SERV_PID << std::endl;
+    if (NUM_MSG == -1){
+      std::cout << "[ERROR] Reading config failed. NUM_MSG: " << NUM_MSG << std::endl;
       return -1;
     }else{
-      std::cout << "Config successfully read. Send " << NUM_MSG << " messages to process ID " << SERV_PID << "\n\n";
-      msg_list.msg_remaining = NUM_MSG;
-      if (my_pid != SERV_PID){msg_list.refill();}
+      std::cout << "Config successfully read. Send " << NUM_MSG << " messages to all (" << n_procs << ") processes\n\n";
+
+      p = 1;
+      while(p<=n_procs){
+        msg_list_vec[p].msg_remaining = NUM_MSG;
+        msg_list_vec[p].refill(my_pid, 0);
+        p++;
+      }
     }
   }else{  // if no config, read from inout stream or something
-    SERV_PID = 1;
 
-    // I need the messages only if I am a sender (client)
-    if (my_pid != SERV_PID){
-
-      std::cout << "Enter the number of messages: ";
-      std::cin >> NUM_MSG;
+    std::cout << "Enter the number of messages: ";
+    std::cin >> NUM_MSG;
   
-      // check for correctness of input (this handles overflow)
-      while (!std::cin.good())
-      {
+    // check for correctness of input (this handles overflow)
+    while (!std::cin.good())
+    {
       
-        // reset and ignore rest of cin (e.g. upon overflown input the cin is capped at max int)
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-        // ask again
-        std::cout << "Enter the number of messages: ";
-        std::cin >> NUM_MSG;
-      }
-      // reset and ignore rest of cin
+      // reset and ignore rest of cin (e.g. upon overflown input the cin is capped at max int)
       std::cin.clear();
       std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-      // at this point NUM_MSG is a valid int, but it has to be >0
-      if (NUM_MSG<=0){
-        std::cout << "NUM_MSG is invalid: " << NUM_MSG << std::endl;
-        return -1;
-      }
+      // ask again
+      std::cout << "Enter the number of messages: ";
+      std::cin >> NUM_MSG;
+    }
+    // reset and ignore rest of cin
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-      // cin the UNIQUE messages and push back to msg_list; one msg is the full line
-      std::string msg_cin_buf;
-      msg_list.msg_remaining = NUM_MSG;
+    // at this point NUM_MSG is a valid int, but it has to be >0
+    if (NUM_MSG<=0){
+      std::cout << "NUM_MSG is invalid: " << NUM_MSG << std::endl;
+      return -1;
+    }
 
-      for (int i=0; i<NUM_MSG; i++){
+    // cin the UNIQUE messages and push back to msg_list; one msg is the full line
+    std::string msg_cin_buf;
+
+    p = 1;
+    while(p<=n_procs){
+      msg_list_vec[p].msg_remaining = NUM_MSG;
+      p++;
+    }
+
+    MessageList msg_list_user;
+    for (int i=0; i<NUM_MSG; i++){
+      std::cout << "Message " << i+1 << ": ";
+      std::getline(std::cin, msg_cin_buf);
+
+      // msg_list has to be unique, keep while msg_cin_buf is in msg_list
+      while (std::find_if(msg_list_user.msg_list.begin(), msg_list_user.msg_list.end(), [&msg_cin_buf](const Message& m) {return m.msg == msg_cin_buf;}) != msg_list_user.msg_list.end()){
+  
+        // ask again
         std::cout << "Message " << i+1 << ": ";
         std::getline(std::cin, msg_cin_buf);
+      }  
 
-        // msg_list has to be unique, keep while msg_cin_buf is in msg_list
-        while (std::find_if(msg_list.msg_list.begin(), msg_list.msg_list.end(), [&msg_cin_buf](const Message& m) {return m.msg == msg_cin_buf;}) != msg_list.msg_list.end()){
-  
-          // ask again
-          std::cout << "Message " << i+1 << ": ";
-          std::getline(std::cin, msg_cin_buf);
-        }  
-
-        msg_list.msg_list.push_back(Message(msg_list.sn_idx, msg_cin_buf));  // sequencing starts from 0
-        msg_list.sn_idx++;
-        msg_list.msg_remaining--;
-      }
+      msg_list_user.msg_list.push_back(Message(my_pid, msg_list_user.sn_idx, msg_cin_buf, 0));  // sequencing starts from 0
+      msg_list_user.sn_idx++;
+      msg_list_user.msg_remaining--;
+    }
+    p = 1;
+    while (p<=n_procs){
+      msg_list_vec[p] = msg_list_user;
+      p++;
     }
   }
 
@@ -206,24 +220,18 @@ int main(int argc, char **argv) {
   // create pending list //
   /*---------------------*/
  
-  std::vector<Message> msg_pending_for_ack;
+  std::map<int, std::vector<Message>> msg_pending_for_ack;
   logger_p2p.msg_pending_for_ack = msg_pending_for_ack;
 
-  /*-------------*/
-  // set IP:port //
-  /*-------------*/
+  /*----------------*/
+  // set my IP:port //
+  /*----------------*/
 
   // set this process IP and port
   char my_ip[200];
   sprintf(my_ip, "%.10s", hosts[parser.id()-1].ipReadable().c_str());
   int my_port = hosts[parser.id()-1].port;
   std::cout << "My socket: " << my_ip << ":" << my_port << ", my process ID: " << my_pid << "\n\n";
-
-  // set server IP and port
-  char serv_ip[200];
-  sprintf(serv_ip, "%.10s", hosts[SERV_PID-1].ipReadable().c_str());
-  int serv_port = hosts[SERV_PID-1].port;
-  std::cout << "Server socket: " << serv_ip << ":" << serv_port << ", server process ID: " << SERV_PID << "\n\n";
 
   // create perfect link object
   PerfectLink pl(my_pid);
@@ -250,6 +258,8 @@ int main(int argc, char **argv) {
   // main loop //
   /*-----------*/
 
+  usleep(5000000);
+
   // my socket: AF_INET: IPv4, SOCK_DGRAM: UDP/IP
   if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
       std::cout << "[ERROR] socket()" << socket_fd << std::endl;
@@ -270,25 +280,22 @@ int main(int argc, char **argv) {
 
   // S.A.R: send, ack, resend
   std::cout << "Start sending messages..." << std::endl;
+  bool log_broadcast = true;
+
   while(true){
 
     for (auto &host : hosts) {
-
       // config other address
       to_addr.sin_family = AF_INET; 
       to_addr.sin_addr.s_addr = inet_addr(host.ipReadable().c_str()); //INADDR_ANY;  
       to_addr.sin_port = htons(host.port);  // port of receiving process
-      std::cout << "Send to: (machine readable) IP: " << to_addr.sin_addr.s_addr << ", (human readable) port: " << to_addr.sin_port <<  std::endl;
-
-      pl.send(msg_list, logger_p2p, socket_fd, to_addr); // send some messages once
+      pl.send(msg_list_vec[int(host.id)], logger_p2p, socket_fd, to_addr, log_broadcast); // send some messages once
+      log_broadcast=false;
     }
+    pl.recv(logger_p2p, socket_fd); // receive messages from other process
+    //pl.resend(logger_p2p, socket_fd, to_addr); // resend all unacked messages once
 
-    pl.recv_ack(logger_p2p, socket_fd, to_addr); // wait for acks until queue empty
-    pl.resend(logger_p2p, socket_fd, to_addr); // resend all unacked messages once
-    pl.recv(logger_p2p, socket_fd, to_addr); // receive messages from other process
-
-    // TODO: make one recv function instead of recv_ack and recv, deliver depending on msg type
-    // TODO: make one type of message class, remove ackmessage, denote ack as a boolean
+    // TODO: resend unacked
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;

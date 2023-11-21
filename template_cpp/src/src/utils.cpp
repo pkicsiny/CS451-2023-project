@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+#include <map>
 
 #include <arpa/inet.h>  // hotnl etc.
 
@@ -19,16 +20,18 @@
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
 Message::Message(){}
-Message::Message(int sequencenumber, std::string message) {
+Message::Message(int broadcaster_pid, int sequencenumber, std::string message, int is_ack_msg) {
+      b_pid = broadcaster_pid;
       sn = sequencenumber;
       msg = message;
+      is_ack = is_ack_msg;
 }
 
 // this is there so that I can send MAX_INT wo filling up the RAM
-void MessageList::refill(){
+void MessageList::refill(int b_pid, int is_ack){
     int msg_list_chunk_size = std::min(MAX_MSG_LIST_SIZE, msg_remaining);
     for(auto ii=0; ii<msg_list_chunk_size; ii++){
-      msg_list.push_back(Message(sn_idx, std::to_string(sn_idx+1)));  // sequencing starts from 0
+      msg_list.push_back(Message(b_pid, sn_idx, std::to_string(sn_idx+1), is_ack));  // sequencing starts from 0
       sn_idx++;  // goes up to NUM_MSG
       msg_remaining--;  // goes down to 0
     }
@@ -39,22 +42,20 @@ void MessageList::refill(){
 // serialize a single message into msg_buffer which contains all msg in packet
 void EncodeMessage(const Message& msg, std::vector<char>& msg_buffer, int packet_idx) {
 
-    // serialize the sequence number to network byte order
-    uint32_t sn_ser = htonl(msg.sn);  // 4 bytes encoding seq. num.; seq. num is max. MAX_INT so 4 bytes needed
-
-    // serialize the message string
+    uint32_t sn_ser = htonl(msg.sn);  // 4 bytes encoding seq. num. in network byte order; seq. num is max. MAX_INT so 4 bytes needed
+    uint32_t b_pid_ser = htonl(msg.b_pid);  // 4 bytes encoding original sender pid in network byte order; b_pid num is max. 128
     const char* msg_ser = msg.msg.data();  // 1 byte per character, pointer to byte repr. of msg
     size_t msg_size = msg.msg.size();
     uint32_t msg_ser_size = htonl(static_cast<uint32_t>(msg_size));  // 4 bytes encoding msg length
 
-    //std::cout << "encoding msg: " << msg.msg << std::endl;
+//    std::cout << "encoding msg: " << msg.msg << std::endl;
 
-    // order of serialized Message: [len_msg, msg, sn]
+    // order of serialized Message: [len_msg, msg, sn, b_pid, is_ack]
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&msg_ser_size), reinterpret_cast<char*>(&msg_ser_size) + sizeof(uint32_t));  // 4 bytes
-//    std::cout << "msg_buffer after encoding msg_size: " << msg_buffer.size() << " bytes" << std::endl;
+//    std::cout << "after encoding size: " << msg_buffer.size() << ", " << msg.msg.size() << std::endl;
     msg_buffer.insert(msg_buffer.end(), msg_ser, msg_ser + msg_size);  // 1 byte
-//    std::cout << "msg_buffer after encoding msg: " << msg_buffer.size() << " bytes" << std::endl;
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&sn_ser), reinterpret_cast<char*>(&sn_ser) + sizeof(uint32_t));  // 4 bytes
+    msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&b_pid_ser), reinterpret_cast<char*>(&b_pid_ser) + sizeof(uint32_t));  // 4 bytes
 //    std::cout << "msg_buffer after encoding sn: " << msg_buffer.size() << " bytes" << std::endl;
 }
 
@@ -66,15 +67,24 @@ Message DecodeMessage(const char* msg_buffer, size_t &offset) {  // offset=0 for
     std::memcpy(&msg_ser_size, msg_buffer + offset, sizeof(uint32_t));
     size_t msg_size = ntohl(msg_ser_size);
     offset += sizeof(uint32_t);
+//    std::cout << "after decoding size: " << msg_size << ", offset: " << offset << std::endl;
 
     // decode msg
     msg.msg.assign(msg_buffer + offset, msg_size);
     offset += msg_size;
+//    std::cout << "after decoding msg: " << msg.msg << ", offset: " << offset << std::endl;
 
     // decocde sn
     std::memcpy(&(msg.sn), msg_buffer + offset, sizeof(uint32_t));
     msg.sn = ntohl(msg.sn);
     offset += sizeof(uint32_t);
+//    std::cout << "after decoding sn: " << msg.sn << ", offset: " << offset << std::endl;
+
+    // decocde b_pid
+    std::memcpy(&(msg.b_pid), msg_buffer + offset, sizeof(uint32_t));
+    msg.b_pid = ntohl(msg.b_pid);
+    offset += sizeof(uint32_t);
+//    std::cout << "after decoding b_pid: " << msg.b_pid << ", offset: " << offset << std::endl;
 
     return msg;
 }
