@@ -304,14 +304,11 @@ int main(int argc, char **argv) {
         to_addr.sin_port = htons(to_host.port);  // port of receiving process
         int to_pid = port_pid_dict[to_host.port];
 
-        // do not resend / relay msg broadcast / relayed by myself to myself->actually i need to resend but not relay
-        //if ((from_pid != my_pid) || (to_pid != my_pid)){
+        // i resend but not relay msgs broadcasted from myself to myself: pending[my_pid][my_pid] fills up at first send
+        // in this implementation relay = resend
         pl.resend(logger_p2p, socket_fd, to_addr, from_pid, to_pid); // resend all unacked messages once
-        //}
       }
     }
-
-    // TODO: resend unacked
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;

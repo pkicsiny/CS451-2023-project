@@ -234,10 +234,6 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             /*---------*/
 
             logger_p2p.log_deliver(msg);  // also adds relayable msg to pending
- 
-            // optimization: i dont relay to myself bc I just delivered it above
-            // TODO: another function: relay, with another relay_pending_for_ack
-            // pending_for_ack: remove if ack from to_pid received; relay_pending_for_ack: remove only 
 
           } // end for packet
   
