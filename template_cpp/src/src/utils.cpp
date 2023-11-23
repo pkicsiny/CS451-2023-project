@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <map>
 #include <unordered_set>
+#include "parser.hpp"
 
 #include <arpa/inet.h>  // hotnl etc.
 
@@ -20,8 +21,10 @@
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
+extern std::map<int, int> port_pid_dict;
 extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
 extern std::unordered_set<std::string> pid_send_dict;
+extern std::vector<Parser::Host> hosts;
 
 Message::Message(){}
 Message::Message(int broadcaster_pid, int sequencenumber, std::string message, int is_ack_msg) {
@@ -195,9 +198,22 @@ void Logger::log_deliver(Message msg){
   int b_pid = msg.b_pid;
   if (pid_recv_dict.find(b_pid) == pid_recv_dict.end()) {
 
-    // msg b from myself is added to bending in send
+    // this takes care of relay: i resend msgs that were broadcasted to me
+    // if msg is already a relayed one i.e. sender_pid =/= b_pid then msg is already in pending so I dont relay relayed
+    // i also dont relay to myself
+
+    // msg broadcast from myself is added to pending in send
     if (b_pid != my_pid){
-      msg_pending_for_ack[b_pid][my_pid].push_back(msg);
+
+      // these are only the msgs broadcast from someone else
+      for (auto & relay_to_host : hosts){
+        int relay_to_pid = port_pid_dict[relay_to_host.port];
+
+        // i dont relay to myself
+        if (relay_to_pid != my_pid){
+          msg_pending_for_ack[b_pid][relay_to_pid].push_back(msg);
+        }
+      }
       print_pending();
     }
 
@@ -217,9 +233,22 @@ void Logger::log_deliver(Message msg){
     // if this is true msg_buf is not yet in dict[pid]
     if (pid_recv_dict[b_pid].find(msg.msg) == pid_recv_dict[b_pid].end()){
 
-      // msg b from myself is added to bending in send
+      // this takes care of relay: i resend msgs that were broadcasted to me
+      // if msg is already a relayed one i.e. sender_pid =/= b_pid then msg is already in pending so I dont relay relayed
+      // i also dont relay to myself
+
+      // msg broadcast from myself is added to pending in send
       if (b_pid != my_pid){
-        msg_pending_for_ack[b_pid][my_pid].push_back(msg);
+
+        // these are only the msgs broadcast from someone else
+        for (auto & relay_to_host : hosts){
+          int relay_to_pid = port_pid_dict[relay_to_host.port];
+
+          // i dont relay to myself
+          if (relay_to_pid != my_pid){
+            msg_pending_for_ack[b_pid][relay_to_pid].push_back(msg);
+          }
+        }
         print_pending();
       }
 

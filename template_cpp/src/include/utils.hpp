@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <map>
 #include <unordered_set>
+#include "parser.hpp"
 
 #define MAX_LOG_PERIOD 100
 #define WINDOW_SIZE 50
@@ -17,8 +18,10 @@
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
+extern std::map<int, int> port_pid_dict;
 extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
 extern std::unordered_set<std::string> pid_send_dict;
+extern std::vector<Parser::Host> hosts;
 
 class Message {
   public:

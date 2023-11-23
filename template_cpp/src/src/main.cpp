@@ -302,7 +302,12 @@ int main(int argc, char **argv) {
         to_addr.sin_family = AF_INET; 
         to_addr.sin_addr.s_addr = inet_addr(to_host.ipReadable().c_str()); //INADDR_ANY;  
         to_addr.sin_port = htons(to_host.port);  // port of receiving process
-        pl.resend(logger_p2p, socket_fd, to_addr, from_pid); // resend all unacked messages once
+        int to_pid = port_pid_dict[to_host.port];
+
+        // do not resend / relay msg broadcast / relayed by myself to myself->actually i need to resend but not relay
+        //if ((from_pid != my_pid) || (to_pid != my_pid)){
+        pl.resend(logger_p2p, socket_fd, to_addr, from_pid, to_pid); // resend all unacked messages once
+        //}
       }
     }
 
