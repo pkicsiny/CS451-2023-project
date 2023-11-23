@@ -81,7 +81,7 @@ class Logger {
   public:
     const char* output_path;
     std::ostringstream ss;
-    std::map<int, std::vector<Message>> msg_pending_for_ack; 
+    std::map<int, std::map<int, std::vector<Message>>> msg_pending_for_ack; 
 
     Logger ();
     Logger (const char*);

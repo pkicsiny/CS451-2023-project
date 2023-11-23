@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
   // create pending list //
   /*---------------------*/
  
-  std::map<int, std::vector<Message>> msg_pending_for_ack;
+  std::map<int, std::map<int, std::vector<Message>>> msg_pending_for_ack;
   logger_p2p.msg_pending_for_ack = msg_pending_for_ack;
 
   /*----------------*/
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
   /*---------------*/
 
   int socket_fd;
-  struct sockaddr_in to_addr;  // other process address
+  struct sockaddr_in from_addr, to_addr;  // other process address
 
   // recv timeout
   struct timeval read_timeout;
@@ -293,7 +293,18 @@ int main(int argc, char **argv) {
       log_broadcast=false;
     }
     pl.recv(logger_p2p, socket_fd); // receive messages from other process
-    //pl.resend(logger_p2p, socket_fd, to_addr); // resend all unacked messages once
+    for (auto &from_host : hosts) {
+      from_addr.sin_family = AF_INET; 
+      from_addr.sin_addr.s_addr = inet_addr(from_host.ipReadable().c_str()); //INADDR_ANY;  
+      from_addr.sin_port = htons(from_host.port);  // port of receiving process
+      int from_pid = port_pid_dict[from_host.port];
+      for (auto &to_host : hosts){
+        to_addr.sin_family = AF_INET; 
+        to_addr.sin_addr.s_addr = inet_addr(to_host.ipReadable().c_str()); //INADDR_ANY;  
+        to_addr.sin_port = htons(to_host.port);  // port of receiving process
+        pl.resend(logger_p2p, socket_fd, to_addr, from_pid); // resend all unacked messages once
+      }
+    }
 
     // TODO: resend unacked
   }  // end while send

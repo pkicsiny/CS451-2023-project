@@ -40,7 +40,7 @@ class PerfectLink{
 
     void send(MessageList&, Logger&, int, sockaddr_in, bool);
     void recv_ack(Logger&, int);
-    void resend(Logger&, int, sockaddr_in);
+    void resend(Logger&, int, sockaddr_in, int);
     void recv(Logger&, int);
 
 };
