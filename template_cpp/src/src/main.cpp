@@ -34,6 +34,7 @@
 Logger logger_p2p;
 std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
 std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+std::unordered_set<std::string> pid_send_dict;
 std::vector<Parser::Host> hosts;
 
 static void stop(int) {
@@ -44,7 +45,7 @@ static void stop(int) {
   std::cout << "Immediately stopping network packet processing.\n";
   std::cout << "Writing output.\n";
   logger_p2p.log_lm_buffer();
-  //std::cout << "[PENDING] " << logger_p2p.msg_pending_for_ack.size() << std::endl;
+  logger_p2p.print_pending();
 
   // exit directly from signal handler
   exit(0);
@@ -92,6 +93,7 @@ int main(int argc, char **argv) {
   /*-------------*/
 
   logger_p2p.output_path = parser.outputPath();
+  logger_p2p.my_pid = my_pid;
   std::cout << "Initialized logger at: " << logger_p2p.output_path << "\n\n";
   logger_p2p.lm_buffer = new LogMessage[MAX_LOG_PERIOD];
   logger_p2p.lm_idx = 0;
@@ -220,7 +222,7 @@ int main(int argc, char **argv) {
   // create pending list //
   /*---------------------*/
  
-  std::map<int, std::map<int, std::vector<Message>>> msg_pending_for_ack;
+  std::map<int, std::map<int, std::vector<Message>>> msg_pending_for_ack;  // keys are not initted
   logger_p2p.msg_pending_for_ack = msg_pending_for_ack;
 
   /*----------------*/
@@ -280,7 +282,6 @@ int main(int argc, char **argv) {
 
   // S.A.R: send, ack, resend
   std::cout << "Start sending messages..." << std::endl;
-  bool log_broadcast = true;
 
   while(true){
 
@@ -289,8 +290,7 @@ int main(int argc, char **argv) {
       to_addr.sin_family = AF_INET; 
       to_addr.sin_addr.s_addr = inet_addr(host.ipReadable().c_str()); //INADDR_ANY;  
       to_addr.sin_port = htons(host.port);  // port of receiving process
-      pl.send(msg_list_vec[int(host.id)], logger_p2p, socket_fd, to_addr, log_broadcast); // send some messages once
-      log_broadcast=false;
+      pl.send(msg_list_vec[int(host.id)], logger_p2p, socket_fd, to_addr); // send some messages once
     }
     pl.recv(logger_p2p, socket_fd); // receive messages from other process
     for (auto &from_host : hosts) {

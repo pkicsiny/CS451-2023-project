@@ -8,6 +8,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <map>
+#include <unordered_set>
 
 #include <arpa/inet.h>  // hotnl etc.
 
@@ -18,6 +19,9 @@
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
+
+extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+extern std::unordered_set<std::string> pid_send_dict;
 
 Message::Message(){}
 Message::Message(int broadcaster_pid, int sequencenumber, std::string message, int is_ack_msg) {
@@ -146,6 +150,14 @@ Ack DecodeAck(const char* ack_buffer, size_t &offset) {  // offset=0 for first c
     return ack;
 }
 
+void Logger::print_pending(){
+          for (auto const& x : msg_pending_for_ack){
+            for (auto const& y : msg_pending_for_ack[x.first]){
+            std::cout << "still pending msgs broadcast from pid (" << x.first << ") to pid ("<< y.first <<"): " << y.second.size() << std::endl;
+            }
+          }
+}
+
 void Logger::log_lm_buffer(){
 
       // log into
@@ -172,7 +184,74 @@ void Logger::log_lm_buffer(){
 Logger::Logger(){
 }
 
-Logger::Logger(const char* op){
+Logger::Logger(const char* op, int pid){
   output_path = op;
+  my_pid = pid;
 }
 
+void Logger::log_deliver(Message msg){
+
+  // pid is not in dict i.e. this is the first msg from proc pid
+  int b_pid = msg.b_pid;
+  if (pid_recv_dict.find(b_pid) == pid_recv_dict.end()) {
+
+    // msg b from myself is added to bending in send
+    if (b_pid != my_pid){
+      msg_pending_for_ack[b_pid][my_pid].push_back(msg);
+      print_pending();
+    }
+
+    pid_recv_dict[b_pid].insert(msg.msg);
+    //logger_p2p.ss << 'd' << ' ' << b_pid << ' ' << msg.msg << '\n';
+    LogMessage lm;
+    lm.m = msg;
+    lm.sender_pid = b_pid;
+    lm.msg_type = 'd';
+    lm_buffer[lm_idx] = lm;
+    lm_idx++;
+    if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}                                              
+
+  // pid is already in dict, if msg is duplicate, do not store in log
+  } else {
+
+    // if this is true msg_buf is not yet in dict[pid]
+    if (pid_recv_dict[b_pid].find(msg.msg) == pid_recv_dict[b_pid].end()){
+
+      // msg b from myself is added to bending in send
+      if (b_pid != my_pid){
+        msg_pending_for_ack[b_pid][my_pid].push_back(msg);
+        print_pending();
+      }
+
+      // msg is not yet in dict so log it
+      pid_recv_dict[b_pid].insert(msg.msg);
+      //logger_p2p.ss << 'd' << ' ' << b_pid << ' ' << msg.msg << '\n';
+      LogMessage lm;
+      lm.m = msg;
+      lm.sender_pid = b_pid;
+      lm.msg_type = 'd';
+      lm_buffer[lm_idx] = lm;
+      lm_idx++;
+      if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
+    } // end if
+  } // end if
+}
+
+void Logger::log_broadcast(Message msg){
+
+  // if this is true msg_buf is not yet in dict[pid]
+  if (pid_send_dict.find(msg.msg) == pid_send_dict.end()){
+
+    // msg is not yet in dict so log it
+    pid_send_dict.insert(msg.msg);
+
+    // log boradcast event of single message
+    LogMessage lm;
+    lm.m = msg;
+    lm.sender_pid = my_pid;  // original broadcaster pid
+    lm.msg_type = 'b';
+    lm_buffer[lm_idx] = lm;
+    lm_idx++;
+    if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
+  } // end if
+}

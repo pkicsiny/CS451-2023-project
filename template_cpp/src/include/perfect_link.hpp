@@ -28,6 +28,7 @@
 
 extern std::map<int, int> port_pid_dict;
 extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
 
 class PerfectLink{
@@ -38,7 +39,7 @@ class PerfectLink{
 
     PerfectLink(int);
 
-    void send(MessageList&, Logger&, int, sockaddr_in, bool);
+    void send(MessageList&, Logger&, int, sockaddr_in);
     void recv_ack(Logger&, int);
     void resend(Logger&, int, sockaddr_in, int);
     void recv(Logger&, int);

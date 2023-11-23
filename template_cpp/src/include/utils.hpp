@@ -9,12 +9,16 @@
 #include <cstring>
 #include <unistd.h>
 #include <map>
+#include <unordered_set>
 
 #define MAX_LOG_PERIOD 100
 #define WINDOW_SIZE 50
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
+
+extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+extern std::unordered_set<std::string> pid_send_dict;
 
 class Message {
   public:
@@ -81,14 +85,18 @@ class Logger {
   public:
     const char* output_path;
     std::ostringstream ss;
+    int my_pid;
     std::map<int, std::map<int, std::vector<Message>>> msg_pending_for_ack; 
 
     Logger ();
-    Logger (const char*);
+    Logger (const char*, int);
 
     int lm_idx;
     LogMessage* lm_buffer;
 
+    void print_pending();
     void log_lm_buffer();
+    void log_broadcast(Message);
+    void log_deliver(Message);
 };
 

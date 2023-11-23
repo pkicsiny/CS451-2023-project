@@ -27,13 +27,14 @@
 
 extern std::map<int, int> port_pid_dict;
 extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
 
 PerfectLink::PerfectLink(int pid){
   my_pid = pid;
 }
 
-void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd, sockaddr_in to_addr, bool log_broadcast){
+void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd, sockaddr_in to_addr){
 
   int to_port = ntohs(to_addr.sin_port); 
   int to_pid = port_pid_dict[to_port];
@@ -57,20 +58,11 @@ void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd,
       //std::cout << "Encoding message: " << msg_list.msg_list[0].msg << " in packet at index " << msg_idx << ". Num. elements in packet: " << msg_packet.size() << std::endl;
 
       // log boradcast event of single message
-      if (log_broadcast){
-        LogMessage lm;
-        lm.m = msg_list.msg_list[0];
-        lm.sender_pid = my_pid;  // original broadcaster pid
-        lm.msg_type = 'b';
-        logger_p2p.lm_buffer[logger_p2p.lm_idx] = lm;
-        logger_p2p.lm_idx++;
-        if(logger_p2p.lm_idx == MAX_LOG_PERIOD){
-          logger_p2p.log_lm_buffer();
-        }
-      }
+      logger_p2p.log_broadcast(msg_list.msg_list[0]);
 
       // wait for ack of msg og boradcast from my_pid to to_pid
       logger_p2p.msg_pending_for_ack[my_pid][to_pid].push_back(msg_list.msg_list[0]);
+      logger_p2p.print_pending();
       msg_list.msg_list.erase(msg_list.msg_list.begin());
 
       // if msg list empty dont exit but fill up with next chunk if there are rmng msg
@@ -97,16 +89,22 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
       int to_pid = port_pid_dict[to_port];
 
       std::cout << "=========================Resending unacked messages og broadcast from pid ("<< from_pid <<") to pid ("<< to_pid <<")=========================" << std::endl;
+      logger_p2p.print_pending();
 
+      // new keys initted here with empty vector value
       if(!(logger_p2p.msg_pending_for_ack[from_pid][to_pid].empty())){
 
         std::vector<char> resend_packet;
         int msg_idx = 0;
 
-        uint32_t is_ack_ser = htonl(0);
-        resend_packet.insert(resend_packet.end(), reinterpret_cast<char*>(&is_ack_ser), reinterpret_cast<char*>(&is_ack_ser) + sizeof(uint32_t));  // 4 bytes
-
         for (Message msg : logger_p2p.msg_pending_for_ack[from_pid][to_pid]){
+
+          // encode is_ack at beginning of packet
+          if (msg_idx==0){
+            uint32_t is_ack_ser = htonl(0);
+            resend_packet.insert(resend_packet.end(), reinterpret_cast<char*>(&is_ack_ser), reinterpret_cast<char*>(&is_ack_ser) + sizeof(uint32_t));  // 4 bytes
+          }
+
           EncodeMessage(msg, resend_packet, msg_idx);
           msg_idx += 1;
           std::cout << "Encoding message: (" << msg.msg << ", " << msg.b_pid << ")." << std::endl;  
@@ -160,6 +158,8 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
       char recv_buf[1024]; // buffer for messages in bytes
       std::vector<char> ack_packet;  // byte array for ack messages
 
+      logger_p2p.print_pending();
+
       // blocking recv
       int64_t r_recv_msg_packet = recvfrom(socket_fd, recv_buf, sizeof(recv_buf), 0,
           reinterpret_cast<struct sockaddr *>(&from_addr), &sizeof_from_addr);  // returns length of incoming message
@@ -187,14 +187,15 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
         is_ack = ntohl(is_ack);
         offset += sizeof(uint32_t);
 
-        std::cout << "offset: " << offset << ", is_ack: " << is_ack  << std::endl;
+        std::cout << "offset: " << offset << ", is_ack: " << is_ack << ", recv_packet_size: " << recv_packet.size() << std::endl;
 
         // decode messages
         std::vector<Message> msg_recv;
         while (offset < recv_packet.size()) {
+          std::cout << "2" << std::endl;
           msg_recv.push_back(DecodeMessage(recv_packet.data(), offset));
         }
-
+        std::cout << "0" << std::endl;
         // upon successful receive trigger event send ack once, ack is "b_pid sn msg 1"
         ack_packet.clear();
         int packet_idx = 0;
@@ -211,12 +212,7 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             logger_p2p.msg_pending_for_ack[b_pid][sender_pid].erase(std::remove(logger_p2p.msg_pending_for_ack[b_pid][sender_pid].begin(), logger_p2p.msg_pending_for_ack[b_pid][sender_pid].end(), ack_msg), logger_p2p.msg_pending_for_ack[b_pid][sender_pid].end());
           }
 
-          std::cout << "[STATUS] pending_list size: " << std::endl;
-          for (auto const& x : logger_p2p.msg_pending_for_ack){
-            for (auto const& y : logger_p2p.msg_pending_for_ack[x.first]){           
-            std::cout << "still pending msgs broadcast from pid (" << x.first << ") to pid ("<< y.first <<"): " << y.second.size() << std::endl;
-            }
-          }
+          //logger_p2p.print_pending();
 
         // this msg is not an ack i.e. it has been broadcast or relayed. It comes from msg.b_pid.
         }else{
@@ -238,42 +234,9 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             /*---------*/
             // deliver //
             /*---------*/
+
+            logger_p2p.log_deliver(msg);
   
-            // pid is not in dict i.e. this is the first msg from proc pid
-            int b_pid = msg.b_pid;
-            if (pid_recv_dict.find(b_pid) == pid_recv_dict.end()) {
-              pid_recv_dict[b_pid].insert(msg.msg);
-              //logger_p2p.ss << 'd' << ' ' << b_pid << ' ' << msg.msg << '\n';
-              LogMessage lm;
-              lm.m = msg;
-              lm.sender_pid = b_pid;
-              lm.msg_type = 'd';
-              logger_p2p.lm_buffer[logger_p2p.lm_idx] = lm;
-              logger_p2p.lm_idx++;
-              if(logger_p2p.lm_idx == MAX_LOG_PERIOD){
-                logger_p2p.log_lm_buffer();
-              }                                              
-  
-            // pid is already in dict, if msg is duplicate, do not store in log
-            } else {
-  
-              // if this is true msg_buf is not yet in dict[pid]
-              if (pid_recv_dict[b_pid].find(msg.msg) == pid_recv_dict[b_pid].end()){
-                // msg is not yet in dict so log it
-                pid_recv_dict[b_pid].insert(msg.msg);
-                //logger_p2p.ss << 'd' << ' ' << b_pid << ' ' << msg.msg << '\n';
-                LogMessage lm;
-                lm.m = msg;
-                lm.sender_pid = b_pid;
-                lm.msg_type = 'd';
-                logger_p2p.lm_buffer[logger_p2p.lm_idx] = lm;
-                logger_p2p.lm_idx++;
-                if(logger_p2p.lm_idx == MAX_LOG_PERIOD){
-                  logger_p2p.log_lm_buffer();
-                }
-  
-              } // end if
-            } // end if
           } // end for packet
   
           /*---------------------------------------*/
