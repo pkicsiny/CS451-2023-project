@@ -181,17 +181,17 @@ void Logger::log_deliver(Message msg, int is_ack){
     auto it = recv_pending_map[b_pid].begin();
     while(it != recv_pending_map[b_pid].end()) {
    
-      std::cout << "trying to fucking deliver msg: (b" << (*it).b_pid << ' ' << (*it).msg << "), which was seen by procs: ";
-      for (auto &gg : ack_seen_dict[(*it).b_pid][(*it).sn]){
-         std::cout << gg << ", ";
-      }
-      std::cout << std::endl;
+//      std::cout << "trying to delivier msg: (b" << (*it).b_pid << ' ' << (*it).msg << "), which was seen by procs: ";
+//      for (auto &gg : ack_seen_dict[(*it).b_pid][(*it).sn]){
+//         std::cout << gg << ", ";
+//      }
+//      std::cout << std::endl;
   
         // if msg is not yet delivered
         if ((delivered_map[b_pid].find((*it).msg) == delivered_map[b_pid].end()) &&
           (static_cast<float>(ack_seen_dict[b_pid][(*it).sn].size()) > 0.5*n_procs)){
   
-          std::cout << "next needed:" << next[b_pid] << ", my msg sn: " << (*it).sn << std::endl;
+//          std::cout << "next needed:" << next[b_pid] << ", my msg sn: " << (*it).sn << std::endl;
           // fifo condition
           if((*it).sn == next[b_pid]) {
             next[b_pid]++;
