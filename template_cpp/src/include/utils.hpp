@@ -40,7 +40,8 @@ class Message {
     // compare a string to this message, this is used to remove acked from pending
     bool operator==(const std::string ack_msg) const {return ((msg == ack_msg) && (msg == ack_msg));}
 };
-
+extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
+extern unsigned int n_procs;  // urb, num_processes / 2
 
 struct MessageList{
   std::vector<Message> msg_list;
@@ -100,6 +101,7 @@ class Logger {
     void print_pending();
     void log_lm_buffer();
     void log_broadcast(Message);
-    void log_deliver(Message);
+    void log_deliver(Message, int);
+    void add_to_ack_seen(Message, int, int);
 };
 

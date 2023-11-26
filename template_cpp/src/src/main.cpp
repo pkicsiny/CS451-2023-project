@@ -36,6 +36,8 @@ std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (c
 std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
 std::unordered_set<std::string> pid_send_dict;
 std::vector<Parser::Host> hosts;
+std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
+unsigned int n_procs = 0;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -46,6 +48,19 @@ static void stop(int) {
   std::cout << "Writing output.\n";
   logger_p2p.log_lm_buffer();
   logger_p2p.print_pending();
+
+  std::cout << "Msgs contained in ack_seen_dict at end:" << std::endl;
+  for (auto &mes : ack_seen_dict){
+     std::cout << "(b" << mes.first << ' ';
+     for (auto &mes_sn: mes.second){
+       std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes: ";
+       for (auto &procc: mes_sn.second){
+         std::cout << 'p' << procc << ' ';
+       }
+       std::cout << std::endl;
+     }
+   }
+   std::cout << std::endl;
 
   // exit directly from signal handler
   exit(0);
@@ -88,6 +103,20 @@ int main(int argc, char **argv) {
    else
      std::cout << "Successfully removed " << parser.outputPath() << "\n\n";
 
+  /*--------------------*/
+  // init port-pid dict //
+  /*--------------------*/
+
+  hosts = parser.hosts();
+
+  // std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
+  for (auto &host : hosts) {
+    port_pid_dict[host.port] = static_cast<int>(host.id);
+    n_procs++;
+    //std::cout << "port: " << host.port << ": process ID " << port_pid_dict[host.port] << std::endl;
+  }
+  std::cout << "there are " << n_procs << " processes in the execution." << std::endl;
+
   /*-------------*/
   // init logger //
   /*-------------*/
@@ -97,22 +126,6 @@ int main(int argc, char **argv) {
   std::cout << "Initialized logger at: " << logger_p2p.output_path << "\n\n";
   logger_p2p.lm_buffer = new LogMessage[MAX_LOG_PERIOD];
   logger_p2p.lm_idx = 0;
-
-  /*--------------------*/
-  // init port-pid dict //
-  /*--------------------*/
-
-  hosts = parser.hosts();
-  unsigned int n_procs = 0;
-
- // std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
-  for (auto &host : hosts) {
-    port_pid_dict[host.port] = static_cast<int>(host.id);
-    n_procs++;
-    //std::cout << "port: " << host.port << ": process ID " << port_pid_dict[host.port] << std::endl;
-  }
-  std::cout << "there are " << n_procs << " processes in the execution." << std::endl;
-
 
   /*------------------*/
   // read config file //
