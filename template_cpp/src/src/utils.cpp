@@ -22,7 +22,8 @@
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
 extern std::map<int, int> port_pid_dict;
-extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
 
@@ -101,9 +102,9 @@ Message DecodeMessage(const char* msg_buffer, size_t &offset) {  // offset=0 for
 }
 
 void Logger::print_pending(){
-          for (auto const& x : msg_pending_for_ack){
-            for (auto const& y : msg_pending_for_ack[x.first]){
-            //std::cout << "still pending msgs broadcast from pid (" << x.first << ") to pid ("<< y.first <<"): " << y.second.size() << std::endl;
+          for (auto const& x : relay_map){
+            for (auto const& y : relay_map[x.first]){
+            std::cout << "still pending msgs broadcast from pid (" << x.first << ") to pid ("<< y.first <<"): " << y.second.size() << std::endl;
             }
           }
 }
@@ -144,41 +145,69 @@ void Logger::log_deliver(Message msg, int is_ack){
 //  std::cout << "ack_seen_dict[msg].size: " << ack_seen_dict[msg].size() << ", n_procs / 2: " << 0.5*n_procs << std::endl;
   int b_pid = msg.b_pid;
 
-  // [] creates b_pid key
-  if (pid_recv_dict[b_pid].find(msg.msg) == pid_recv_dict[b_pid].end()){
 
-    // this takes care of relay: i resend msgs that were sent to me (broadcasts, relays)
-    // if msg is already a relayed one i.e. sender_pid =/= b_pid then msg is already in pending so I dont relay relayed
+//  if (recv_pending_map[b_pid].find(msg.msg) == recv_pending_map[b_pid].end()){
 
-    // msg broadcast from myself is added to pending in send
-    if ((b_pid != my_pid) && (is_ack==0)){
+  // if not yet delivered and not in pending (ie new msg, could be from any sender), add to pendong. [] creates b_pid key
+  if (delivered_map[b_pid].find(msg.msg) == delivered_map[b_pid].end()){
+    if (std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), msg) == recv_pending_map[b_pid].end()){
+       recv_pending_map[b_pid].push_back(msg);
+      // std::cout << "adding b" << b_pid << ' ' << msg.msg << " to relay" << std::endl;
+  
+      // this takes care of relay: i resend msgs that were sent to me (broadcasts, relays)
+      // only if not yet in pending, add to relay list; one msg from a b_pid will be added to relay list only once
+      // msg broadcast from myself is added to pending in send
+      if ((b_pid != my_pid) && (is_ack==0)){
 
-      // these are only the msgs broadcast from someone else
-      for (auto & relay_to_host : hosts){
-        int relay_to_pid = port_pid_dict[relay_to_host.port];
+        // these are only the msgs broadcast from someone else
+        for (auto & relay_to_host : hosts){
+          int relay_to_pid = port_pid_dict[relay_to_host.port];
 
-        // i dont relay to myself
-        if (relay_to_pid != my_pid){
-          msg_pending_for_ack[b_pid][relay_to_pid].push_back(msg);
+          // i dont relay to myself
+          if (relay_to_pid != my_pid){
+            relay_map[b_pid][relay_to_pid].push_back(msg);
+          }
         }
       }
-      print_pending();
     }
+  }
 
-    // urb deliver
-    if (static_cast<float>(ack_seen_dict[msg.b_pid][msg.sn].size()) > 0.5*n_procs){
-      pid_recv_dict[b_pid].insert(msg.msg);
-      LogMessage lm;
-      lm.m = msg;
-      lm.sender_pid = b_pid;
-      lm.msg_type = 'd';
-      lm_buffer[lm_idx] = lm;
-      lm_idx++;
-      if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
-    } // end urb deliver
- //     else{std::cout << "cannot urb deliver msg (ack=" << is_ack<< "): d " << b_pid << ' ' << msg.msg << std::endl;}
-
-  } // end if
+  // if it wasnt deliverable last time it wont unless a new processs seen msg
+  if (new_ack){
+    new_ack = false;
+    // attempt delivery: for all msg that is already in pending
+    std::cout << "running urb delivery while "<< std::endl;
+    auto it = recv_pending_map[b_pid].begin();
+    while(it != recv_pending_map[b_pid].end()) {
+   
+      std::cout << "trying to fucking deliver msg: (b" << (*it).b_pid << ' ' << (*it).msg << "), which was seen by procs: ";
+      for (auto &gg : ack_seen_dict[(*it).b_pid][(*it).sn]){
+         std::cout << gg << ", ";
+      }
+      std::cout << std::endl;
+  
+        // if msg is not yet delivered
+        if ((delivered_map[b_pid].find((*it).msg) == delivered_map[b_pid].end()) &&
+          (static_cast<float>(ack_seen_dict[b_pid][(*it).sn].size()) > 0.5*n_procs)){
+  
+          // fifo condition
+          if((*it).sn == next[b_pid]) {
+            next[b_pid]++;
+  
+            std::cout << "d " << (*it).b_pid << ' ' << (*it).msg << std::endl;
+            delivered_map[b_pid].insert((*it).msg);
+            LogMessage lm;
+            lm.m = *it;
+            lm.sender_pid = b_pid;
+            lm.msg_type = 'd';
+            lm_buffer[lm_idx] = lm;
+            lm_idx++;
+            if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
+            it = recv_pending_map[b_pid].erase(it);
+            }else{it++;}  // end fifo deliver
+        }else{it++;} // end urb deliver
+    } // end while
+  }
 }
 
 void Logger::log_broadcast(Message msg){
@@ -211,14 +240,17 @@ void Logger::add_to_ack_seen(Message msg, int sender_pid, int is_ack){
 //   }
 //   std::cout << std::endl;
 
-  // msg from this b_pid was already seen by some other pid-s, [] creates keys
+  // [] creates keys if doesnt already exist
   if (ack_seen_dict[msg.b_pid][msg.sn].find(sender_pid) == ack_seen_dict[msg.b_pid][msg.sn].end()){
     ack_seen_dict[msg.b_pid][msg.sn].insert(sender_pid);
+    new_ack = true;
+    std::cout << "msg b" << msg.b_pid << ' ' << msg.msg << " is now seen by pid: "<< sender_pid << std::endl;
     // attempt urb delivery
-    log_deliver(msg, is_ack);
+    //log_deliver(msg, is_ack);
    }
 //if(is_ack==1){std::cout << std::endl;}
 //     std::cout << "Msgs contained in ack_seen_dict after:" << std::endl;
+
 //     for (auto &mes : ack_seen_dict){
 //       std::cout << "(b" << mes.first << ' ';
 //       for (auto &mes_sn: mes.second){

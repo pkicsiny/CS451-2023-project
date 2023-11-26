@@ -19,7 +19,8 @@
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
 extern std::map<int, int> port_pid_dict;
-extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+
+
 extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
 extern std::vector<int> next;  // fifo
@@ -43,6 +44,10 @@ class Message {
 };
 extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 extern unsigned int n_procs;  // urb, num_processes / 2
+//extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+//extern std::map<int64_t, std::vector<Message>> delivered_map;
+extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
 struct MessageList{
   std::vector<Message> msg_list;
@@ -87,13 +92,14 @@ class Logger {
     const char* output_path;
     std::ostringstream ss;
     int my_pid;
-    std::map<int, std::map<int, std::vector<Message>>> msg_pending_for_ack; 
+    std::map<int, std::map<int, std::vector<Message>>> relay_map; 
 
     Logger ();
     Logger (const char*, int);
 
     int lm_idx;
     LogMessage* lm_buffer;
+    bool new_ack=false;
 
     void print_pending();
     void log_lm_buffer();

@@ -26,7 +26,11 @@
 #include "perfect_link.hpp"
 
 extern std::map<int, int> port_pid_dict;
-extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+//extern std::map<int64_t, std::unordered_set<Message>> recv_pending_map;
+//extern std::map<int64_t, std::unordered_set<Message>> delivered_map;
+extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
+
 extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
 extern unsigned int n_procs;  // urb, num_processes / 2
@@ -64,7 +68,7 @@ void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd,
       logger_p2p.log_broadcast(msg_list.msg_list[0]);
 
       // wait for ack of msg og boradcast from my_pid to to_pid
-      logger_p2p.msg_pending_for_ack[my_pid][to_pid].push_back(msg_list.msg_list[0]);
+      logger_p2p.relay_map[my_pid][to_pid].push_back(msg_list.msg_list[0]);
 //      logger_p2p.print_pending();
       msg_list.msg_list.erase(msg_list.msg_list.begin());
 
@@ -88,16 +92,16 @@ void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd,
 
 void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr, int from_pid, int to_pid){
 
-//      std::cout << "=========================Resending unacked messages og broadcast from pid ("<< from_pid <<") to pid ("<< to_pid <<")=========================" << std::endl;
+ //     std::cout << "=========================Resending unacked messages og broadcast from pid ("<< from_pid <<") to pid ("<< to_pid <<")=========================" << std::endl;
 //      logger_p2p.print_pending();
 
       // new keys initted here with empty vector value
-      if(!(logger_p2p.msg_pending_for_ack[from_pid][to_pid].empty())){
+      if(!(logger_p2p.relay_map[from_pid][to_pid].empty())){
 
         std::vector<char> resend_packet;
         int msg_idx = 0;
 
-        for (Message msg : logger_p2p.msg_pending_for_ack[from_pid][to_pid]){
+        for (Message msg : logger_p2p.relay_map[from_pid][to_pid]){
 
           // encode is_ack at beginning of packet
           if (msg_idx==0){
@@ -203,14 +207,12 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
           for (Message msg: msg_recv){
             int b_pid = msg.b_pid;  // pid of og broadcaster
             std::string ack_msg = msg.msg;
-            std::cout << "Received ack message: (b"<< msg.b_pid << " " << msg.sn << ") from sender pid: "<<sender_pid << '.'<<std::endl;
+            //std::cout << "Received ack message: (b"<< msg.b_pid << " " << msg.sn << ") from sender pid: "<<sender_pid << '.'<<std::endl;
 
-            // urb: msg has been seen by sender_pid either if it sends back ack or relay
-            //logger_p2p.add_to_ack_seen(msg, sender_pid, is_ack);
-
-            // msg_pending_for_ack is unique; get back ack of msgs sent from all processes
+            // relay_map is unique; get back ack of msgs sent from all processes
             // if ack_msg is not in pending then pending_for_ack remains unmodified
-            logger_p2p.msg_pending_for_ack[b_pid][sender_pid].erase(std::remove(logger_p2p.msg_pending_for_ack[b_pid][sender_pid].begin(), logger_p2p.msg_pending_for_ack[b_pid][sender_pid].end(), ack_msg), logger_p2p.msg_pending_for_ack[b_pid][sender_pid].end());
+            // stop relaying (b msg) to sender_pid
+            logger_p2p.relay_map[b_pid][sender_pid].erase(std::remove(logger_p2p.relay_map[b_pid][sender_pid].begin(), logger_p2p.relay_map[b_pid][sender_pid].end(), ack_msg), logger_p2p.relay_map[b_pid][sender_pid].end());
           }
 
           //logger_p2p.print_pending();
@@ -244,12 +246,12 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
               logger_p2p.add_to_ack_seen(msg, my_pid, is_ack);
             }
             logger_p2p.log_deliver(msg, is_ack);  // also adds relayable msg to pending
-
           } // end for packet
-  
-          /*---------------------------------------*/
-          // send ack packet to all processes once //
-          /*---------------------------------------*/
+ 
+          std::cout << "send ack"<< std::endl; 
+          /*-------------------------------*/
+          // send ack packet to sender_pid //
+          /*-------------------------------*/
 
 
             size_t ack_packet_size = ack_packet.size();  // byte size, since sizeof(char)=1

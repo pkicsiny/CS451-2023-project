@@ -33,7 +33,11 @@
 
 Logger logger_p2p;
 std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
-std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+//std::map<int64_t, std::vector<Message>> recv_pending_map;
+//std::map<int64_t, std::vector<Message>> delivered_map;
+std::map<int64_t, std::vector<Message>> recv_pending_map;
+std::map<int64_t, std::unordered_set<std::string>> delivered_map;
+
 std::unordered_set<std::string> pid_send_dict;
 std::vector<Parser::Host> hosts;
 std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
@@ -239,8 +243,8 @@ int main(int argc, char **argv) {
   // create pending list //
   /*---------------------*/
  
-  std::map<int, std::map<int, std::vector<Message>>> msg_pending_for_ack;  // keys are not initted
-  logger_p2p.msg_pending_for_ack = msg_pending_for_ack;
+  std::map<int, std::map<int, std::vector<Message>>> relay_map;  // keys are not initted
+  logger_p2p.relay_map = relay_map;
 
   /*----------------*/
   // set my IP:port //
@@ -277,7 +281,7 @@ int main(int argc, char **argv) {
   // main loop //
   /*-----------*/
 
-  usleep(5000000);
+  usleep(100000);
 
   // my socket: AF_INET: IPv4, SOCK_DGRAM: UDP/IP
   if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 

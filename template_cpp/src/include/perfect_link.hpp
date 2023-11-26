@@ -27,7 +27,11 @@
 #include "utils.hpp"
 
 extern std::map<int, int> port_pid_dict;
-extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
+//extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+//extern std::map<int64_t, std::vector<Message>> delivered_map;
+extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
+
 extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
 extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
