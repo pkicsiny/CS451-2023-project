@@ -38,6 +38,7 @@ std::unordered_set<std::string> pid_send_dict;
 std::vector<Parser::Host> hosts;
 std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 unsigned int n_procs = 0;
+std::vector<int> next;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -116,6 +117,9 @@ int main(int argc, char **argv) {
     //std::cout << "port: " << host.port << ": process ID " << port_pid_dict[host.port] << std::endl;
   }
   std::cout << "there are " << n_procs << " processes in the execution." << std::endl;
+
+  // fifo: num_procs lists of sequence numbers, all initted with 0
+  next.resize(n_procs, 0);
 
   /*-------------*/
   // init logger //

@@ -32,6 +32,7 @@ extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
 extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 extern unsigned int n_procs;  // urb, num_processes / 2
+extern std::vector<int> next;  // fifo
 
 class PerfectLink{
   public:

@@ -22,6 +22,7 @@ extern std::map<int, int> port_pid_dict;
 extern std::map<int64_t, std::unordered_set<std::string>> pid_recv_dict;
 extern std::unordered_set<std::string> pid_send_dict;
 extern std::vector<Parser::Host> hosts;
+extern std::vector<int> next;  // fifo
 
 class Message {
   public:
@@ -74,10 +75,6 @@ class Ack {
     // compare an ack message with a message
     bool operator==(const Message &m) const {return ((sn == m.sn) && (msg == m.msg));}
 };
-
-// serialize a single message into msg_buffer which contains all msg in packet
-void EncodeAck(const Ack& ack, std::vector<char>& ack_buffer, int sender_pid);
-Ack DecodeAck(const char* ack_buffer, size_t &offset);
 
 struct LogMessage {
   char msg_type;

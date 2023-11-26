@@ -28,6 +28,7 @@ extern std::vector<Parser::Host> hosts;
 
 extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 extern unsigned int n_procs;  // urb, num_processes / 2
+extern std::vector<int> next;  // fifo
 
 Message::Message(){}
 Message::Message(int broadcaster_pid, int sequencenumber, std::string message, int is_ack_msg) {
@@ -99,63 +100,6 @@ Message DecodeMessage(const char* msg_buffer, size_t &offset) {  // offset=0 for
     return msg;
 }
 
-Ack::Ack(){}
-Ack::Ack(int processid, int sequencenumber, std::string message) {
-      pid = processid;
-      sn = sequencenumber;
-      msg = message;
-}
-
-// serialize a single message into msg_buffer which contains all msg in packet
-void EncodeAck(const Ack& ack, std::vector<char>& ack_buffer, int sender_pid) {
-
-    uint32_t sn_ser = htonl(ack.sn);
-    uint32_t pid_ser = htonl(sender_pid);
-    const char* ack_ser = ack.msg.data();
-    size_t ack_size = ack.msg.size();
-    uint32_t ack_ser_size = htonl(static_cast<uint32_t>(ack_size));
-
-    //std::cout << "Encode ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
-
-    // order of serialized Message: [len_msg, msg, sn, pid]
-    ack_buffer.insert(ack_buffer.end(), reinterpret_cast<char*>(&ack_ser_size), reinterpret_cast<char*>(&ack_ser_size) + sizeof(uint32_t));
-    ack_buffer.insert(ack_buffer.end(), ack_ser, ack_ser + ack_size);
-    ack_buffer.insert(ack_buffer.end(), reinterpret_cast<char*>(&sn_ser), reinterpret_cast<char*>(&sn_ser) + sizeof(uint32_t));
-    ack_buffer.insert(ack_buffer.end(), reinterpret_cast<char*>(&pid_ser), reinterpret_cast<char*>(&pid_ser) + sizeof(uint32_t));
-}
-
-Ack DecodeAck(const char* ack_buffer, size_t &offset) {  // offset=0 for first call
-    Ack ack;
-
-    // get length of msg
-    uint32_t ack_ser_size;
-    std::memcpy(&ack_ser_size, ack_buffer + offset, sizeof(uint32_t));
-    size_t ack_size = ntohl(ack_ser_size);
-    offset += sizeof(uint32_t);
-    //std::cout << "offset: " << offset << std::endl;
-
-    // decode msg
-    ack.msg.assign(ack_buffer + offset, ack_size);
-    offset += ack_size;
-    //std::cout << "offset: " << offset << std::endl;
-
-    // decocde sn
-    std::memcpy(&(ack.sn), ack_buffer + offset, sizeof(uint32_t));
-    ack.sn = ntohl(ack.sn);
-    offset += sizeof(uint32_t);
-    //std::cout << "offset: " << offset << std::endl;
-
-    // decocde sender pid
-    uint32_t pid_ser;
-    std::memcpy(&(pid_ser), ack_buffer + offset, sizeof(uint32_t));
-    ack.pid = ntohl(pid_ser);
-    offset += sizeof(uint32_t);
-
-    //std::cout << "Decoded ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
-
-    return ack;
-}
-
 void Logger::print_pending(){
           for (auto const& x : msg_pending_for_ack){
             for (auto const& y : msg_pending_for_ack[x.first]){
@@ -198,15 +142,15 @@ Logger::Logger(const char* op, int pid){
 void Logger::log_deliver(Message msg, int is_ack){
 
 //  std::cout << "ack_seen_dict[msg].size: " << ack_seen_dict[msg].size() << ", n_procs / 2: " << 0.5*n_procs << std::endl;
-  // pid is not in dict i.e. this is the first msg from proc pid
   int b_pid = msg.b_pid;
-  if (pid_recv_dict.find(b_pid) == pid_recv_dict.end()) {
 
-    // this takes care of relay: i resend msgs that were broadcasted to me
+  // [] creates b_pid key
+  if (pid_recv_dict[b_pid].find(msg.msg) == pid_recv_dict[b_pid].end()){
+
+    // this takes care of relay: i resend msgs that were sent to me (broadcasts, relays)
     // if msg is already a relayed one i.e. sender_pid =/= b_pid then msg is already in pending so I dont relay relayed
-    // i also dont relay to myself
 
-    //rb: msg broadcast from myself is added to pending in send
+    // msg broadcast from myself is added to pending in send
     if ((b_pid != my_pid) && (is_ack==0)){
 
       // these are only the msgs broadcast from someone else
@@ -224,62 +168,16 @@ void Logger::log_deliver(Message msg, int is_ack){
     // urb deliver
     if (static_cast<float>(ack_seen_dict[msg.b_pid][msg.sn].size()) > 0.5*n_procs){
       pid_recv_dict[b_pid].insert(msg.msg);
-//          for (auto &bb : pid_recv_dict){
-//            std::cout << "delivered " << bb.second.size() << " messages b " << bb.first << std::endl;
-//          }
       LogMessage lm;
       lm.m = msg;
       lm.sender_pid = b_pid;
       lm.msg_type = 'd';
       lm_buffer[lm_idx] = lm;
       lm_idx++;
-      if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}                                              
-    } // end urb deliver
-//      else{std::cout << "cannot urb deliver msg (ack=" << is_ack<< "): d " << b_pid << ' ' << msg.msg << std::endl;}
-
-  // pid is already in dict, if msg is duplicate, do not store in log
-  } else {
-
-    // if this is true msg_buf is not yet in dict[pid]
-    if (pid_recv_dict[b_pid].find(msg.msg) == pid_recv_dict[b_pid].end()){
-
-      // this takes care of relay: i resend msgs that were broadcasted to me
-      // if msg is already a relayed one i.e. sender_pid =/= b_pid then msg is already in pending so I dont relay relayed
-      // i also dont relay to myself
-
-      // msg broadcast from myself is added to pending in send
-      if ((b_pid != my_pid) && (is_ack==0)){
-
-        // these are only the msgs broadcast from someone else
-        for (auto & relay_to_host : hosts){
-          int relay_to_pid = port_pid_dict[relay_to_host.port];
-
-          // i dont relay to myself
-          if (relay_to_pid != my_pid){
-            msg_pending_for_ack[b_pid][relay_to_pid].push_back(msg);
-          }
-        }
-        print_pending();
-      }
-
-      // urb deliver
-      if (static_cast<float>(ack_seen_dict[msg.b_pid][msg.sn].size()) > 0.5*n_procs){
-       pid_recv_dict[b_pid].insert(msg.msg);
-//          for (auto &bb : pid_recv_dict){
-//            std::cout << "delivered " << bb.second.size() << " messages b " << bb.first << std::endl;
-//          }
-        pid_recv_dict[b_pid].insert(msg.msg);
-        LogMessage lm;
-        lm.m = msg;
-        lm.sender_pid = b_pid;
-        lm.msg_type = 'd';
-        lm_buffer[lm_idx] = lm;
-        lm_idx++;
-        if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
-      } // end urb deliver
+      if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
+    } // end urb deliver
  //     else{std::cout << "cannot urb deliver msg (ack=" << is_ack<< "): d " << b_pid << ' ' << msg.msg << std::endl;}
 
-    } // end if
   } // end if
 }
 
@@ -313,37 +211,12 @@ void Logger::add_to_ack_seen(Message msg, int sender_pid, int is_ack){
 //   }
 //   std::cout << std::endl;
 
-//   std::cout << "Trying to find msg: (b" << msg.b_pid << ' ' << msg.msg << ") in ack_seen_dict keys" << std::endl;
- //  if(is_ack==1){std::cout << "0";}
-   // check if first msg from this b_pid
-   if (ack_seen_dict.find(msg.b_pid) == ack_seen_dict.end()) {
-  //   if (is_ack==1){std::cout << "1";}
-     ack_seen_dict[msg.b_pid][msg.sn].insert(sender_pid);
-
-//     std::cout << "key doesnt exits. pid "<< sender_pid << " has seen (b" << msg.b_pid << ' ' << msg.msg << "). Attempting delivery of this msg."<< std::endl;
-
-     // attempt urb delivery
-     log_deliver(msg, is_ack);
-
-   } else {
-    //   if(is_ack==1){std::cout << "2";}
-     // check if msg from this b_pid has been seen by any pid
-//     std::cout << "b_pid key already exists" << std::endl;
-       if (ack_seen_dict[msg.b_pid].find(msg.sn) == ack_seen_dict[msg.b_pid].end()) {
-    //     if(is_ack==1){std::cout << "3";}
-         ack_seen_dict[msg.b_pid][msg.sn].insert(sender_pid);
-       }else{
-      //   if(is_ack==1){std::cout << "4";}
-         // msg from this b_pid was already seen by some other pid-s
-         if (ack_seen_dict[msg.b_pid][msg.sn].find(sender_pid) == ack_seen_dict[msg.b_pid][msg.sn].end()){
-  //         if(is_ack==1){std::cout << "5";}
-           ack_seen_dict[msg.b_pid][msg.sn].insert(sender_pid);
- //          std::cout << "pid "<< sender_pid << " has seen (b" << msg.b_pid << ' ' << msg.msg << ") Attempting delivery ofr this msg." <<std::endl;
-           // attempt urb delivery
-           log_deliver(msg, is_ack);
-       }
-     } // end if
-   } // end if
+  // msg from this b_pid was already seen by some other pid-s, [] creates keys
+  if (ack_seen_dict[msg.b_pid][msg.sn].find(sender_pid) == ack_seen_dict[msg.b_pid][msg.sn].end()){
+    ack_seen_dict[msg.b_pid][msg.sn].insert(sender_pid);
+    // attempt urb delivery
+    log_deliver(msg, is_ack);
+   }
 //if(is_ack==1){std::cout << std::endl;}
 //     std::cout << "Msgs contained in ack_seen_dict after:" << std::endl;
 //     for (auto &mes : ack_seen_dict){
