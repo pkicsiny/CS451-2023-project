@@ -281,7 +281,7 @@ int main(int argc, char **argv) {
   // main loop //
   /*-----------*/
 
-  usleep(100000);
+  //usleep(100000);
 
   // my socket: AF_INET: IPv4, SOCK_DGRAM: UDP/IP
   if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 

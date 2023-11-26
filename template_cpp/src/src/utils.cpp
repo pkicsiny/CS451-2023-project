@@ -176,15 +176,15 @@ void Logger::log_deliver(Message msg, int is_ack){
   if (new_ack){
     new_ack = false;
     // attempt delivery: for all msg that is already in pending
-    std::cout << "running urb delivery while "<< std::endl;
+    //std::cout << "running urb delivery while "<< std::endl;
     auto it = recv_pending_map[b_pid].begin();
     while(it != recv_pending_map[b_pid].end()) {
    
-      std::cout << "trying to fucking deliver msg: (b" << (*it).b_pid << ' ' << (*it).msg << "), which was seen by procs: ";
-      for (auto &gg : ack_seen_dict[(*it).b_pid][(*it).sn]){
-         std::cout << gg << ", ";
-      }
-      std::cout << std::endl;
+      //std::cout << "trying to fucking deliver msg: (b" << (*it).b_pid << ' ' << (*it).msg << "), which was seen by procs: ";
+      //for (auto &gg : ack_seen_dict[(*it).b_pid][(*it).sn]){
+      //   std::cout << gg << ", ";
+      //}
+      //std::cout << std::endl;
   
         // if msg is not yet delivered
         if ((delivered_map[b_pid].find((*it).msg) == delivered_map[b_pid].end()) &&
@@ -194,7 +194,7 @@ void Logger::log_deliver(Message msg, int is_ack){
           if((*it).sn == next[b_pid]) {
             next[b_pid]++;
   
-            std::cout << "d " << (*it).b_pid << ' ' << (*it).msg << std::endl;
+            //std::cout << "d " << (*it).b_pid << ' ' << (*it).msg << std::endl;
             delivered_map[b_pid].insert((*it).msg);
             LogMessage lm;
             lm.m = *it;
@@ -244,7 +244,7 @@ void Logger::add_to_ack_seen(Message msg, int sender_pid, int is_ack){
   if (ack_seen_dict[msg.b_pid][msg.sn].find(sender_pid) == ack_seen_dict[msg.b_pid][msg.sn].end()){
     ack_seen_dict[msg.b_pid][msg.sn].insert(sender_pid);
     new_ack = true;
-    std::cout << "msg b" << msg.b_pid << ' ' << msg.msg << " is now seen by pid: "<< sender_pid << std::endl;
+    //std::cout << "msg b" << msg.b_pid << ' ' << msg.msg << " is now seen by pid: "<< sender_pid << std::endl;
     // attempt urb delivery
     //log_deliver(msg, is_ack);
    }

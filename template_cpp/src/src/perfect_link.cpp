@@ -234,7 +234,7 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             Message ack(msg.b_pid, msg.sn, msg.msg, 1);
             EncodeMessage(ack, ack_packet, packet_idx);
             packet_idx++;
-            std::cout << "Received message: (b" << msg.b_pid << " " << msg.sn << ") sent from pid: " << sender_pid<<  " in packet."<<std::endl;  
+            //std::cout << "Received message: (b" << msg.b_pid << " " << msg.sn << ") sent from pid: " << sender_pid<<  " in packet."<<std::endl;  
 
             /*---------*/
             // deliver //
@@ -248,7 +248,6 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             logger_p2p.log_deliver(msg, is_ack);  // also adds relayable msg to pending
           } // end for packet
  
-          std::cout << "send ack"<< std::endl; 
           /*-------------------------------*/
           // send ack packet to sender_pid //
           /*-------------------------------*/
