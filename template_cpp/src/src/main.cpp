@@ -258,6 +258,16 @@ int main(int argc, char **argv) {
 
   // create perfect link object
   PerfectLink pl(my_pid);
+  std::vector<bool> lock_send(n_procs, false);
+  std::vector<int> total_resent(n_procs, 0);
+  std::vector<int> total_ack_sent(n_procs, 0);
+  std::vector<int> total_recv(n_procs, 0);
+  std::vector<int> total_ack_recv(n_procs, 0);  
+  pl.lock_send = lock_send;
+  pl.total_resent = total_resent;
+  pl.total_ack_sent = total_ack_sent;
+  pl.total_recv = total_recv;
+  pl.total_ack_recv = total_ack_recv;
 
   /*---------------*/
   // create socket //
@@ -269,7 +279,7 @@ int main(int argc, char **argv) {
   // recv timeout
   struct timeval read_timeout;
   read_timeout.tv_sec = 0;
-  read_timeout.tv_usec = 10;
+  read_timeout.tv_usec = 100;
 
   std::cout << "======================================================" << std::endl;
   std::cout << "Init complete. Broadcasting and delivering messages...\n\n";

@@ -48,52 +48,58 @@ void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd,
 
   int w = 0;
 
-  while((!msg_list.msg_list.empty()) & (w<WINDOW_SIZE)){  
-    //std::cout << "=========================Number of messages in list to send to pid (" << to_pid <<"): " << msg_list.msg_list.size() << "=========================" << std::endl;
+  if (!lock_send[to_pid-1]){
+//    if(1){
+    while((!msg_list.msg_list.empty()) && (w<WINDOW_SIZE)){  
+//      std::cout << "=========================Number of messages in list to send to pid (" << to_pid <<"): " << msg_list.msg_list.size() << "=========================" << std::endl;
 
-    // fill up packet with max 8 messages, or until there are msgs left 
-    std::vector<char> msg_packet;
-    int msg_idx = 0;
-    int is_ack = 0;
-    uint32_t is_ack_ser = htonl(is_ack);
-    msg_packet.insert(msg_packet.end(), reinterpret_cast<char*>(&is_ack_ser), reinterpret_cast<char*>(&is_ack_ser) + sizeof(uint32_t));  // 4 bytes
+      // fill up packet with max 8 messages, or until there are msgs left 
+      std::vector<char> msg_packet;
+      int msg_idx = 0;
+      int is_ack = 0;
+      uint32_t is_ack_ser = htonl(is_ack);
+      msg_packet.insert(msg_packet.end(), reinterpret_cast<char*>(&is_ack_ser), reinterpret_cast<char*>(&is_ack_ser) + sizeof(uint32_t));  // 4 bytes
 
-    // msg_packet: [is_ack, msg_1, msg_2, ..., msg_8]
-    while((msg_idx < MAX_PACKET_SIZE) && !(msg_list.msg_list.empty())){
-      EncodeMessage(msg_list.msg_list[0], msg_packet, msg_idx);
-      msg_idx += 1;
-      //std::cout << "Encoding message: " << msg_list.msg_list[0].msg << " in packet at index " << msg_idx << ". Num. elements in packet: " << msg_packet.size() << std::endl;
+      // msg_packet: [is_ack, msg_1, msg_2, ..., msg_8]
+      while((msg_idx < MAX_PACKET_SIZE) && !(msg_list.msg_list.empty())){
+        EncodeMessage(msg_list.msg_list[0], msg_packet, msg_idx);
+        msg_idx += 1;
+//        std::cout << "Encoding message: " << msg_list.msg_list[0].msg << " in packet at index " << msg_idx << ". Num. elements in packet: " << msg_packet.size() << std::endl;
 
-      // log boradcast event of single message
-      logger_p2p.log_broadcast(msg_list.msg_list[0]);
+        // log boradcast event of single message
+        logger_p2p.log_broadcast(msg_list.msg_list[0]);
+  
+        // wait for ack of msg og boradcast from my_pid to to_pid
+        logger_p2p.relay_map[my_pid][to_pid].push_back(msg_list.msg_list[0]);
+  //      logger_p2p.print_pending();
+        msg_list.msg_list.erase(msg_list.msg_list.begin());
 
-      // wait for ack of msg og boradcast from my_pid to to_pid
-      logger_p2p.relay_map[my_pid][to_pid].push_back(msg_list.msg_list[0]);
-//      logger_p2p.print_pending();
-      msg_list.msg_list.erase(msg_list.msg_list.begin());
-
-      // if msg list empty dont exit but fill up with next chunk if there are rmng msg
-      if ((msg_list.msg_list.empty()) & (msg_list.msg_remaining!=0)){
-        msg_list.refill(my_pid, 0);
+        // if msg list empty dont exit but fill up with next chunk if there are rmng msg
+        if ((msg_list.msg_list.empty()) & (msg_list.msg_remaining!=0)){
+          msg_list.refill(my_pid, 0);
+        }
       }
-    }
-    size_t packet_size = msg_packet.size();  // byte size, since sizeof(char)=1
-    int64_t r_send_msg_packet = sendto(socket_fd, msg_packet.data(), packet_size, 0,
-        reinterpret_cast<struct sockaddr *>(&to_addr), sizeof(to_addr)); // returns number of characters sent
-    if (r_send_msg_packet<0){
-      //std::cout << "[send::ERROR] Send failed with error: " << strerror(errno) << std::endl;        
-    }else{
-      //std::cout << "[send::SEND] sent packet with bytes: " << r_send_msg_packet << std::endl;
-    }
-    w++;
-  } // end while send window
+      size_t packet_size = msg_packet.size();  // byte size, since sizeof(char)=1
+      int64_t r_send_msg_packet = sendto(socket_fd, msg_packet.data(), packet_size, 0,
+          reinterpret_cast<struct sockaddr *>(&to_addr), sizeof(to_addr)); // returns number of characters sent
+      if (r_send_msg_packet<0){
+        //std::cout << "[send::ERROR] Send failed with error: " << strerror(errno) << std::endl;        
+      }else{
+        //std::cout << "[send::SEND] sent packet with bytes: " << r_send_msg_packet << std::endl;
+      }
+      w++;
+    } // end while send window
+    // sent WINDOW_SIZE*MAX_PACKET_SIZE messages. Lock send and unlock only after I acked all sent msgs
+    lock_send[to_pid-1] = true;
+  } // end if !lock_send
+
 } // end send()
 
 
 void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr, int from_pid, int to_pid){
 
- //     std::cout << "=========================Resending unacked messages og broadcast from pid ("<< from_pid <<") to pid ("<< to_pid <<")=========================" << std::endl;
-//      logger_p2p.print_pending();
+      //std::cout << "=========================Resending unacked messages og broadcast from pid ("<< from_pid <<") to pid ("<< to_pid <<")=========================" << std::endl;
+      //logger_p2p.print_pending();
 
       // new keys initted here with empty vector value
       if(!(logger_p2p.relay_map[from_pid][to_pid].empty())){
@@ -123,7 +129,8 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
             if (r_resend_msg_packet<0){
 //              std::cout << "[resend::SEND] resend to pid ("<< to_pid <<") failed with error: " << strerror(errno) << std::endl;
             }else{
-//              std::cout << "[resend::SEND] resent packet to pid ("<< to_pid <<") with bytes: " << r_resend_msg_packet << std::endl;
+              total_resent[to_pid-1]++;
+//              std::cout << "[resend::SEND] resent packet to pid ("<< to_pid <<") with bytes: " << r_resend_msg_packet << ". Total packets resent: " << total_resent[to_pid-1] << std::endl;
               //for (auto val : resend_packet) printf("%d ", val);
               //std::cout << "..." << std::endl;
             } 
@@ -134,7 +141,7 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
         } // end for messages
 
         // mod MAX_PACKET_SIZE //
-        if ((msg_idx>0) & (msg_idx<MAX_PACKET_SIZE)){  // this is a packet smaller than MAX_PACKET_SIZE messages
+        if ((msg_idx>0) && (msg_idx<MAX_PACKET_SIZE)){  // this is a packet smaller than MAX_PACKET_SIZE messages
             size_t packet_size = resend_packet.size();  // byte size, since sizeof(char)=1
             int64_t r_resend_msg_packet = sendto(socket_fd, resend_packet.data(), packet_size, 0,
                 reinterpret_cast<struct sockaddr *>(&to_addr), sizeof(to_addr)); // returns number of characters sent
@@ -156,7 +163,7 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
   sockaddr_in from_addr;
   socklen_t sizeof_from_addr = sizeof(from_addr);
 
-  //std::cout << "=========================Listening for messages to receive=========================" << std::endl;
+//  std::cout << "=========================Listening for messages to receive=========================" << std::endl;
 
   while(true){
       char recv_buf[1024]; // buffer for messages in bytes
@@ -204,22 +211,29 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
 
         // msg is an ack
         if (is_ack==1){
+          total_ack_recv[sender_pid-1]++;
+//          std::cout << "Received ack packet from sender pid: "<<sender_pid << ". Total ack packets received: " << total_ack_recv[sender_pid-1] << std::endl;
+
           for (Message msg: msg_recv){
             int b_pid = msg.b_pid;  // pid of og broadcaster
             std::string ack_msg = msg.msg;
-            //std::cout << "Received ack message: (b"<< msg.b_pid << " " << msg.sn << ") from sender pid: "<<sender_pid << '.'<<std::endl;
+ //           std::cout << "Received ack message: (b"<< msg.b_pid << " " << msg.sn << ") from sender pid: "<<sender_pid << '.'<< " Total ack packets received: " << total_ack_recv[sender_pid-1] << std::endl;
 
             // relay_map is unique; get back ack of msgs sent from all processes
             // if ack_msg is not in pending then pending_for_ack remains unmodified
-            // stop relaying (b msg) to sender_pid
+            // delete a msg = stop relaying (b_pid msg) to (sender_pid)
             logger_p2p.relay_map[b_pid][sender_pid].erase(std::remove(logger_p2p.relay_map[b_pid][sender_pid].begin(), logger_p2p.relay_map[b_pid][sender_pid].end(), ack_msg), logger_p2p.relay_map[b_pid][sender_pid].end());
+
+            // if sender_pid has acked all msgs b by me, unlock sending next WINDOW_SIZE*MAX_PACKET_SIZE msgs
+            if ((b_pid==my_pid) && (logger_p2p.relay_map[my_pid][sender_pid].empty()) && (lock_send[sender_pid-1]=true)){lock_send[sender_pid-1]=false;}
           }
 
           //logger_p2p.print_pending();
 
         // this msg is not an ack i.e. it has been broadcast or relayed. It comes from msg.b_pid.
         }else{
-
+          total_recv[sender_pid-1]++;
+//          std::cout << "Received packet sent from pid: " << sender_pid<<  " in packet. Total msg packets received: " << total_recv[sender_pid-1] << std::endl;  
           int b_pid_from_msg=0;
           for (Message msg: msg_recv){
 
@@ -234,13 +248,13 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             Message ack(msg.b_pid, msg.sn, msg.msg, 1);
             EncodeMessage(ack, ack_packet, packet_idx);
             packet_idx++;
-            //std::cout << "Received message: (b" << msg.b_pid << " " << msg.sn << ") sent from pid: " << sender_pid<<  " in packet."<<std::endl;  
+//            std::cout << "Received-message: (b" << msg.b_pid << " " << msg.sn << ") sent from pid: " << sender_pid<<  " in packet." << " Total msg packets received: " << total_recv[sender_pid-1] << std::endl;  
 
             /*---------*/
             // deliver //
             /*---------*/
 
-            // urb: msg has been seen by sender_pid either if it sends back ack or relay
+            // this msg was seen by sender_pid since it sent/relayed it to me
             logger_p2p.add_to_ack_seen(msg, sender_pid, is_ack);
             if (my_pid != sender_pid){ // if got msg from someone else I saw it so add to ack
               logger_p2p.add_to_ack_seen(msg, my_pid, is_ack);
@@ -256,12 +270,6 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             size_t ack_packet_size = ack_packet.size();  // byte size, since sizeof(char)=1
             struct sockaddr_in to_addr;  // other process address
   
-            //for (auto &host : hosts) {
-            //  to_addr.sin_family = AF_INET;
-            //  to_addr.sin_addr.s_addr = inet_addr(host.ipReadable().c_str()); //INADDR_ANY;  
-            //  to_addr.sin_port = htons(host.port);  // port of receiving process
-            //  int to_pid = port_pid_dict[host.port];
-
               // if i got msg from myself: send ack to myself to stop resending to myself
               // I dont send ack to myself if (ack = pls stop flooding me with this msg since i got it):
               // 1 - I got back my msg relayed from someone else (if im correct ill receive all msgs from me through send/resend)
@@ -276,7 +284,9 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             if (r_send_ack_packet < 0) {
                 //std::cout << "[recv::ERROR] sending ack message failed with error: " << strerror(errno) << std::endl;
             }else{
-              //std::cout << "[recv::SEND] sent ack packet with bytes: " << r_send_ack_packet << std::endl;
+              total_ack_sent[sender_pid-1]++;
+//              std::cout << "[recv::SEND] sent ack packet with bytes: " << r_send_ack_packet << ". Total ack packets sent: " << total_ack_sent[sender_pid-1] << std::endl;
+
               //for (auto val : ack_packet) printf("%d ", val);
               //std::cout << "..." << std::endl;
             }

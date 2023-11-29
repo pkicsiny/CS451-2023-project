@@ -193,8 +193,8 @@ void Logger::log_deliver(Message msg, int is_ack){
   
 //          std::cout << "next needed:" << next[b_pid] << ", my msg sn: " << (*it).sn << std::endl;
           // fifo condition
-          if((*it).sn == next[b_pid]) {
-            next[b_pid]++;
+          if((*it).sn == next[b_pid-1]) {
+            next[b_pid-1]++;
   
             //std::cout << "d " << (*it).b_pid << ' ' << (*it).msg << std::endl;
             delivered_map[b_pid].insert((*it).msg);

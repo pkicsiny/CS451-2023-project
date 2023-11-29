@@ -43,6 +43,11 @@ class PerfectLink{
     int my_pid;
     size_t prev_size;
     char ack_buf[1024];
+    std::vector<bool> lock_send;  // lock_send[pid-1], sliding window, stops sending new msgs to pid until this proc acked all msgs previously sent to pid
+    std::vector<int> total_resent;
+    std::vector<int> total_ack_sent;
+    std::vector<int> total_recv;
+    std::vector<int> total_ack_recv;
 
     PerfectLink(int);
 
