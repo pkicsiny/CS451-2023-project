@@ -32,17 +32,17 @@
 /*-------*/
 
 Logger logger_p2p;
-std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
+std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
 //std::map<int64_t, std::vector<Message>> recv_pending_map;
 //std::map<int64_t, std::vector<Message>> delivered_map;
 std::map<int64_t, std::vector<Message>> recv_pending_map;
 std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
-std::unordered_set<std::string> pid_send_dict;
-std::vector<Parser::Host> hosts;
-std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
+std::unordered_set<std::string> pid_send_uset;
+std::vector<Parser::Host> hosts_vec;
+std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_map;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 unsigned int n_procs = 0;
-std::vector<int> next;
+std::vector<int> next_vec;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -51,21 +51,21 @@ static void stop(int) {
 
   std::cout << "Immediately stopping network packet processing.\n";
   std::cout << "Writing output.\n";
-  logger_p2p.log_lm_buffer();
-  logger_p2p.print_pending();
+  logger_p2p.log_lm_buffer(1);
+//  logger_p2p.print_pending();
 
-  std::cout << "Msgs contained in ack_seen_dict at end:" << std::endl;
-  for (auto &mes : ack_seen_dict){
-     std::cout << "(b" << mes.first << ' ';
-     for (auto &mes_sn: mes.second){
-       std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes: ";
-       for (auto &procc: mes_sn.second){
-         std::cout << 'p' << procc << ' ';
-       }
-       std::cout << std::endl;
-     }
-   }
-   std::cout << std::endl;
+//  std::cout << "Msgs contained in ack_seen_map at end:" << std::endl;
+//  for (auto &mes : ack_seen_map){
+//     std::cout << "(b" << mes.first << ' ';
+//     for (auto &mes_sn: mes.second){
+//       std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes: ";
+//       for (auto &procc: mes_sn.second){
+//         std::cout << 'p' << procc << ' ';
+//       }
+//       std::cout << std::endl;
+//     }
+//   }
+//   std::cout << std::endl;
 
   // exit directly from signal handler
   exit(0);
@@ -112,18 +112,18 @@ int main(int argc, char **argv) {
   // init port-pid dict //
   /*--------------------*/
 
-  hosts = parser.hosts();
+  hosts_vec = parser.hosts();
 
-  // std::map<int, int> port_pid_dict;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
-  for (auto &host : hosts) {
-    port_pid_dict[host.port] = static_cast<int>(host.id);
+  // std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
+  for (auto &host : hosts_vec) {
+    port_pid_map[host.port] = static_cast<int>(host.id);
     n_procs++;
-    //std::cout << "port: " << host.port << ": process ID " << port_pid_dict[host.port] << std::endl;
+    //std::cout << "port: " << host.port << ": process ID " << port_pid_map[host.port] << std::endl;
   }
   std::cout << "there are " << n_procs << " processes in the execution." << std::endl;
 
   // fifo: num_procs lists of sequence numbers, all initted with 0
-  next.resize(n_procs, 0);
+  next_vec.resize(n_procs, 0);
 
   /*-------------*/
   // init logger //
@@ -252,18 +252,18 @@ int main(int argc, char **argv) {
 
   // set this process IP and port
   char my_ip[200];
-  sprintf(my_ip, "%.10s", hosts[parser.id()-1].ipReadable().c_str());
-  int my_port = hosts[parser.id()-1].port;
+  sprintf(my_ip, "%.10s", hosts_vec[parser.id()-1].ipReadable().c_str());
+  int my_port = hosts_vec[parser.id()-1].port;
   std::cout << "My socket: " << my_ip << ":" << my_port << ", my process ID: " << my_pid << "\n\n";
 
   // create perfect link object
   PerfectLink pl(my_pid);
-  std::vector<bool> lock_send(n_procs, false);
+  std::vector<bool> lock_send_vec(n_procs, false);
   std::vector<int> total_resent(n_procs, 0);
   std::vector<int> total_ack_sent(n_procs, 0);
   std::vector<int> total_recv(n_procs, 0);
   std::vector<int> total_ack_recv(n_procs, 0);  
-  pl.lock_send = lock_send;
+  pl.lock_send_vec = lock_send_vec;
   pl.total_resent = total_resent;
   pl.total_ack_sent = total_ack_sent;
   pl.total_recv = total_recv;
@@ -316,7 +316,7 @@ int main(int argc, char **argv) {
 
   while(true){
 
-    for (auto &host : hosts) {
+    for (auto &host : hosts_vec) {
       // config other address
       to_addr.sin_family = AF_INET; 
       to_addr.sin_addr.s_addr = inet_addr(host.ipReadable().c_str()); //INADDR_ANY;  
@@ -324,16 +324,16 @@ int main(int argc, char **argv) {
       pl.send(msg_list_vec[int(host.id)], logger_p2p, socket_fd, to_addr); // send some messages once
     }
     pl.recv(logger_p2p, socket_fd); // receive messages from other process
-    for (auto &from_host : hosts) {
+    for (auto &from_host : hosts_vec) {
       from_addr.sin_family = AF_INET; 
       from_addr.sin_addr.s_addr = inet_addr(from_host.ipReadable().c_str()); //INADDR_ANY;  
       from_addr.sin_port = htons(from_host.port);  // port of receiving process
-      int from_pid = port_pid_dict[from_host.port];
-      for (auto &to_host : hosts){
+      int from_pid = port_pid_map[from_host.port];
+      for (auto &to_host : hosts_vec){
         to_addr.sin_family = AF_INET; 
         to_addr.sin_addr.s_addr = inet_addr(to_host.ipReadable().c_str()); //INADDR_ANY;  
         to_addr.sin_port = htons(to_host.port);  // port of receiving process
-        int to_pid = port_pid_dict[to_host.port];
+        int to_pid = port_pid_map[to_host.port];
 
         // i resend but not relay msgs broadcasted from myself to myself: pending[my_pid][my_pid] fills up at first send
         // in this implementation relay = resend

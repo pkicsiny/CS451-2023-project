@@ -25,17 +25,17 @@
 #include "utils.hpp"
 #include "perfect_link.hpp"
 
-extern std::map<int, int> port_pid_dict;
+extern std::map<int, int> port_pid_map;
 //extern std::map<int64_t, std::unordered_set<Message>> recv_pending_map;
 //extern std::map<int64_t, std::unordered_set<Message>> delivered_map;
 extern std::map<int64_t, std::vector<Message>> recv_pending_map;
 extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
-extern std::unordered_set<std::string> pid_send_dict;
-extern std::vector<Parser::Host> hosts;
+extern std::unordered_set<std::string> pid_send_uset;
+extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
 extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
-extern std::vector<int> next;  // fifo
+extern std::vector<int> next_vec;  // fifo
 
 PerfectLink::PerfectLink(int pid){
   my_pid = pid;
@@ -44,11 +44,11 @@ PerfectLink::PerfectLink(int pid){
 void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd, sockaddr_in to_addr){
 
   int to_port = ntohs(to_addr.sin_port); 
-  int to_pid = port_pid_dict[to_port];
+  int to_pid = port_pid_map[to_port];
 
   int w = 0;
 
-  if (!lock_send[to_pid-1]){
+  if (!lock_send_vec[to_pid-1]){
 //    if(1){
     while((!msg_list.msg_list.empty()) && (w<WINDOW_SIZE)){  
 //      std::cout << "=========================Number of messages in list to send to pid (" << to_pid <<"): " << msg_list.msg_list.size() << "=========================" << std::endl;
@@ -67,7 +67,7 @@ void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd,
 //        std::cout << "Encoding message: " << msg_list.msg_list[0].msg << " in packet at index " << msg_idx << ". Num. elements in packet: " << msg_packet.size() << std::endl;
 
         // log boradcast event of single message
-        logger_p2p.log_broadcast(msg_list.msg_list[0]);
+        logger_p2p.log_broadcast(msg_list.msg_list[0], 0);
   
         // wait for ack of msg og boradcast from my_pid to to_pid
         logger_p2p.relay_map[my_pid][to_pid].push_back(msg_list.msg_list[0]);
@@ -90,8 +90,8 @@ void PerfectLink::send(MessageList& msg_list, Logger& logger_p2p, int socket_fd,
       w++;
     } // end while send window
     // sent WINDOW_SIZE*MAX_PACKET_SIZE messages. Lock send and unlock only after I acked all sent msgs
-    lock_send[to_pid-1] = true;
-  } // end if !lock_send
+    lock_send_vec[to_pid-1] = true;
+  } // end if !lock_send_vec
 
 } // end send()
 
@@ -130,7 +130,7 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
 //              std::cout << "[resend::SEND] resend to pid ("<< to_pid <<") failed with error: " << strerror(errno) << std::endl;
             }else{
               total_resent[to_pid-1]++;
-//              std::cout << "[resend::SEND] resent packet to pid ("<< to_pid <<") with bytes: " << r_resend_msg_packet << ". Total packets resent: " << total_resent[to_pid-1] << std::endl;
+ //             std::cout << "[resend::SEND] resent packet to pid ("<< to_pid <<") with bytes: " << r_resend_msg_packet << ". Total packets resent: " << total_resent[to_pid-1] << std::endl;
               //for (auto val : resend_packet) printf("%d ", val);
               //std::cout << "..." << std::endl;
             } 
@@ -176,12 +176,12 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
           reinterpret_cast<struct sockaddr *>(&from_addr), &sizeof_from_addr);  // returns length of incoming message
 
       if (r_recv_msg_packet < 0) {
-        //std::cout << "[recv::TIMEOUT] recvfrom timed out or no more incoming data: " << strerror(errno) << std::endl;
+//        std::cout << "[recv::TIMEOUT] recvfrom timed out or no more incoming data: " << strerror(errno) << std::endl;
         break;
       // decode single msg received
       }else if (r_recv_msg_packet != 0) {
         int sender_port = ntohs(from_addr.sin_port); 
-        int sender_pid = port_pid_dict[sender_port];
+        int sender_pid = port_pid_map[sender_port];
 
         //std::cout << "[recv::RECV] received " << r_recv_msg_packet << " bytes from pid (" << sender_pid << ")" << std::endl;
 
@@ -212,7 +212,7 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
         // msg is an ack
         if (is_ack==1){
           total_ack_recv[sender_pid-1]++;
-//          std::cout << "Received ack packet from sender pid: "<<sender_pid << ". Total ack packets received: " << total_ack_recv[sender_pid-1] << std::endl;
+  //        std::cout << "Received ack packet from sender pid: "<<sender_pid << ". Total ack packets received: " << total_ack_recv[sender_pid-1] << std::endl;
 
           for (Message msg: msg_recv){
             int b_pid = msg.b_pid;  // pid of og broadcaster
@@ -225,7 +225,7 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             logger_p2p.relay_map[b_pid][sender_pid].erase(std::remove(logger_p2p.relay_map[b_pid][sender_pid].begin(), logger_p2p.relay_map[b_pid][sender_pid].end(), ack_msg), logger_p2p.relay_map[b_pid][sender_pid].end());
 
             // if sender_pid has acked all msgs b by me, unlock sending next WINDOW_SIZE*MAX_PACKET_SIZE msgs
-            if ((b_pid==my_pid) && (logger_p2p.relay_map[my_pid][sender_pid].empty()) && (lock_send[sender_pid-1]=true)){lock_send[sender_pid-1]=false;}
+            if ((b_pid==my_pid) && (logger_p2p.relay_map[my_pid][sender_pid].empty()) && (lock_send_vec[sender_pid-1]=true)){lock_send_vec[sender_pid-1]=false;}
           }
 
           //logger_p2p.print_pending();
@@ -259,7 +259,7 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             if (my_pid != sender_pid){ // if got msg from someone else I saw it so add to ack
               logger_p2p.add_to_ack_seen(msg, my_pid, is_ack);
             }
-            logger_p2p.log_deliver(msg, is_ack);  // also adds relayable msg to pending
+            logger_p2p.log_deliver(msg, is_ack, 0);  // also adds relayable msg to pending
           } // end for packet
  
           /*-------------------------------*/

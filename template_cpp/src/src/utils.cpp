@@ -16,20 +16,20 @@
 #include "utils.hpp"
 
 #define MAX_LOG_PERIOD 100
-#define WINDOW_SIZE 50
+#define WINDOW_SIZE 10
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
-extern std::map<int, int> port_pid_dict;
+extern std::map<int, int> port_pid_map;
 extern std::map<int64_t, std::vector<Message>> recv_pending_map;
 extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
-extern std::unordered_set<std::string> pid_send_dict;
-extern std::vector<Parser::Host> hosts;
+extern std::unordered_set<std::string> pid_send_uset;
+extern std::vector<Parser::Host> hosts_vec;
 
-extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
+extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_map;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::vector<int> next;  // fifo
+extern std::vector<int> next_vec;  // fifo
 
 Message::Message(){}
 Message::Message(int broadcaster_pid, int sequencenumber, std::string message, int is_ack_msg) {
@@ -109,28 +109,34 @@ void Logger::print_pending(){
           }
 }
 
-void Logger::log_lm_buffer(){
+void Logger::log_lm_buffer(int call_mode){
+  //std::cout << "Call mode: " << call_mode << std::endl;
+  // log into
+  std::fstream output_file;
+  output_file.open(output_path, std::ios_base::in | std::ios_base::app);
+  bool do_log;
+  int last_lm_idx = -1;
 
-      // log into
-      std::ofstream output_file;
-      output_file.open(output_path, std::ios_base::app);
-
-      if (output_file.is_open()){
-        for(int i = 0; i < lm_idx; i++) {
-          if(lm_buffer[i].msg_type == 'b'){
-            output_file << "b " << lm_buffer[i].m.msg << std::endl;
-          }else{
-            output_file << "d " << lm_buffer[i].sender_pid << ' ' << lm_buffer[i].m.msg << std::endl;
-          }
-        }
-        lm_idx = 0;
-        output_file.close();
+  if (output_file.is_open()){
+    for(int i = 0; i < lm_idx; i++) {
+      do_log = true; // for each msg try to log by default
+      std::stringstream ss; // stringstream containing a full log line
+      if(lm_buffer[i].msg_type == 'b'){
+        ss << "b " << lm_buffer[i].m.msg << std::endl;
+        //std::cout << ss.str();
       }else{
-        std::cout << "Could not open output file: " << output_path << std::endl;
+        ss << "d " << lm_buffer[i].sender_pid << ' ' << lm_buffer[i].m.msg << std::endl;
+        //std::cout << ss.str();
       }
+      do_log = check_dupes(do_log, output_file, ss, call_mode, last_lm_idx, i); // check if msg already in logfile (relevant after sigterm/int)
+      if (do_log){output_file << ss.str();}
+    }
+    lm_idx = 0; // reset pointer in log buffer
+    output_file.close();
+  }else{
+    std::cout << "Could not open output file: " << output_path << std::endl;
+  }
 }
-
-
 
 Logger::Logger(){
 }
@@ -140,9 +146,33 @@ Logger::Logger(const char* op, int pid){
   my_pid = pid;
 }
 
-void Logger::log_deliver(Message msg, int is_ack){
+bool Logger::check_dupes(bool& do_log, std::fstream& output_file, std::stringstream& desired_line, int call_mode, int& last_lm_idx, int i){
+  if ((call_mode==1) && (i==last_lm_idx+1)){
+    std::string cur_line;
+//    std::cout << "looking for: " << desired_line.str() << std::endl;
+    output_file.seekg(0, std::ios::beg);  // move get (read) pointer to start
+    while (std::getline(output_file, cur_line)) {
+      if (std::cin.good()) {cur_line += '\n';} // if there should be nl and nl (relevant at last line)
+      bool equal = cur_line == desired_line.str(); 
+  //    std::cout << "success: " << cur_line << "==" << desired_line.str() << "equal?: "<< equal << std::endl;
+      if (cur_line == desired_line.str()) {
+    //    std::cout << "found " << desired_line.str() << " already in log. Not logging this." << std::endl;
+        do_log = false;
+        last_lm_idx = i;
+        break;  // exit while loop, dont log this line
+      }
+    }
 
-//  std::cout << "ack_seen_dict[msg].size: " << ack_seen_dict[msg].size() << ", n_procs / 2: " << 0.5*n_procs << std::endl;
+    output_file.clear();  // loop could have reached end of file, reset errorbit
+    output_file.seekp(0, std::ios_base::end); // set put pointer to end of file
+  }
+  return do_log;
+}
+
+
+void Logger::log_deliver(Message msg, int is_ack, int call_mode){
+
+//  std::cout << "ack_seen_map[msg].size: " << ack_seen_map[msg].size() << ", n_procs / 2: " << 0.5*n_procs << std::endl;
   int b_pid = msg.b_pid;
 
 
@@ -160,8 +190,8 @@ void Logger::log_deliver(Message msg, int is_ack){
       if ((b_pid != my_pid) && (is_ack==0)){
 
         // these are only the msgs broadcast from someone else
-        for (auto & relay_to_host : hosts){
-          int relay_to_pid = port_pid_dict[relay_to_host.port];
+        for (auto & relay_to_host : hosts_vec){
+          int relay_to_pid = port_pid_map[relay_to_host.port];
 
           // i dont relay to myself
           if (relay_to_pid != my_pid){
@@ -176,26 +206,17 @@ void Logger::log_deliver(Message msg, int is_ack){
   if (new_ack){
     new_ack = false;
     // attempt delivery: for all msg that is already in pending
-    //std::cout << "running urb delivery while "<< std::endl;
     std::sort(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end());
     auto it = recv_pending_map[b_pid].begin();
     while(it != recv_pending_map[b_pid].end()) {
    
-//      std::cout << "trying to delivier msg: (b" << (*it).b_pid << ' ' << (*it).msg << "), which was seen by procs: ";
-//      for (auto &gg : ack_seen_dict[(*it).b_pid][(*it).sn]){
-//         std::cout << gg << ", ";
-//      }
-//      std::cout << std::endl;
-  
-        // if msg is not yet delivered
+        // urb: if msg is not yet delivered and seen by more than half of procs
         if ((delivered_map[b_pid].find((*it).msg) == delivered_map[b_pid].end()) &&
-          (static_cast<float>(ack_seen_dict[b_pid][(*it).sn].size()) > 0.5*n_procs)){
+          (static_cast<float>(ack_seen_map[b_pid][(*it).sn].size()) > 0.5*n_procs)){
   
-//          std::cout << "next needed:" << next[b_pid] << ", my msg sn: " << (*it).sn << std::endl;
-          // fifo condition
-          if((*it).sn == next[b_pid-1]) {
-            next[b_pid-1]++;
-  
+          // fifo: if this is the next sn
+          if((*it).sn == next_vec[b_pid-1]) {
+            next_vec[b_pid-1]++;
             //std::cout << "d " << (*it).b_pid << ' ' << (*it).msg << std::endl;
             delivered_map[b_pid].insert((*it).msg);
             LogMessage lm;
@@ -204,7 +225,7 @@ void Logger::log_deliver(Message msg, int is_ack){
             lm.msg_type = 'd';
             lm_buffer[lm_idx] = lm;
             lm_idx++;
-            if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
+            if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer(call_mode);} // 100 msgs from different pids, but pid ordered
             it = recv_pending_map[b_pid].erase(it);
             }else{it++;}  // end fifo deliver
         }else{it++;} // end urb deliver
@@ -212,13 +233,13 @@ void Logger::log_deliver(Message msg, int is_ack){
   }
 }
 
-void Logger::log_broadcast(Message msg){
+void Logger::log_broadcast(Message msg, int call_mode){
 
   // if this is true msg_buf is not yet in dict[pid]
-  if (pid_send_dict.find(msg.msg) == pid_send_dict.end()){
+  if (pid_send_uset.find(msg.msg) == pid_send_uset.end()){
 
     // msg is not yet in dict so log it
-    pid_send_dict.insert(msg.msg);
+    pid_send_uset.insert(msg.msg);
 
     // log boradcast event of single message
     LogMessage lm;
@@ -227,14 +248,14 @@ void Logger::log_broadcast(Message msg){
     lm.msg_type = 'b';
     lm_buffer[lm_idx] = lm;
     lm_idx++;
-    if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer();}
+    if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer(call_mode);}
   } // end if
 }
 
 void Logger::add_to_ack_seen(Message msg, int sender_pid, int is_ack){
 
-//   std::cout << "Msgs contained in ack_seen_dict before:" << std::endl;
-//   for (auto &mes : ack_seen_dict){
+//   std::cout << "Msgs contained in ack_seen_map before:" << std::endl;
+//   for (auto &mes : ack_seen_map){
 //      std::cout << "(b" << mes.first << ' ';
 //      for (auto &mes_sn: mes.second){
 //        std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes." << std::endl;
@@ -243,17 +264,17 @@ void Logger::add_to_ack_seen(Message msg, int sender_pid, int is_ack){
 //   std::cout << std::endl;
 
   // [] creates keys if doesnt already exist
-  if (ack_seen_dict[msg.b_pid][msg.sn].find(sender_pid) == ack_seen_dict[msg.b_pid][msg.sn].end()){
-    ack_seen_dict[msg.b_pid][msg.sn].insert(sender_pid);
+  if (ack_seen_map[msg.b_pid][msg.sn].find(sender_pid) == ack_seen_map[msg.b_pid][msg.sn].end()){
+    ack_seen_map[msg.b_pid][msg.sn].insert(sender_pid);
     new_ack = true;
     //std::cout << "msg b" << msg.b_pid << ' ' << msg.msg << " is now seen by pid: "<< sender_pid << std::endl;
     // attempt urb delivery
     //log_deliver(msg, is_ack);
    }
 //if(is_ack==1){std::cout << std::endl;}
-//     std::cout << "Msgs contained in ack_seen_dict after:" << std::endl;
+//     std::cout << "Msgs contained in ack_seen_map after:" << std::endl;
 
-//     for (auto &mes : ack_seen_dict){
+//     for (auto &mes : ack_seen_map){
 //       std::cout << "(b" << mes.first << ' ';
 //       for (auto &mes_sn: mes.second){
 //         std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes." << std::endl;
@@ -261,3 +282,5 @@ void Logger::add_to_ack_seen(Message msg, int sender_pid, int is_ack){
 //   }
 //   std::cout << std::endl;
 }
+
+
