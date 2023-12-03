@@ -26,7 +26,8 @@
 #include "perfect_link.hpp"
 
 extern std::map<int, int> port_pid_map;
-extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+extern std::map<int64_t, std::map<int, Message>> pending_msg_map;
+extern std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
 extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
 extern std::unordered_set<std::string> pid_send_uset;
@@ -137,7 +138,7 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
 //              std::cout << "[resend::SEND] resend to pid ("<< to_pid <<") failed with error: " << strerror(errno) << std::endl;
             }else{
               total_resent[to_pid-1]++;
-              //std::cout << "[resend::SEND] resent packet to pid ("<< to_pid <<") with bytes: " << r_resend_msg_packet << ". Total packets resent: " << total_resent[to_pid-1] << std::endl;
+//              std::cout << "[resend::SEND] resent packet to pid ("<< to_pid <<") with bytes: " << r_resend_msg_packet << ". Total packets resent: " << total_resent[to_pid-1] << std::endl;
             } 
             msg_idx = 0; // reset packet index to overwrite with new msg
             resend_packet.clear();

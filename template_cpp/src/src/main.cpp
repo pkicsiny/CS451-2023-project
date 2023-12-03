@@ -33,7 +33,9 @@
 
 Logger logger_p2p;
 std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
-std::map<int64_t, std::vector<Message>> recv_pending_map;
+std::map<int64_t, std::map<int, Message>> pending_msg_map;
+std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
+
 std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
 std::unordered_set<std::string> pid_send_uset;
@@ -51,6 +53,20 @@ static void stop(int) {
   std::cout << "Writing output.\n";
   logger_p2p.log_lm_buffer(1);
 
+/*
+  std::cout << "Msgs contained in ack_seen_map at end:" << std::endl;
+  for (auto &mes : ack_seen_map){
+     std::cout << "(b" << mes.first << ' ';
+     for (auto &mes_sn: mes.second){
+       std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes: ";
+       for (auto &procc: mes_sn.second){
+         std::cout << 'p' << procc << ' ';
+       }
+       std::cout << std::endl;
+     }
+   }
+   std::cout << std::endl;
+*/
   // exit directly from signal handler
   exit(0);
 }

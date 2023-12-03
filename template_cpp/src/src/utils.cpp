@@ -10,6 +10,7 @@
 #include <map>
 #include <unordered_set>
 #include <algorithm>
+#include "assert.h"
 #include "parser.hpp"
 
 #include <arpa/inet.h>  // hotnl etc.
@@ -17,13 +18,14 @@
 #include "utils.hpp"
 
 #define MAX_LOG_PERIOD 100
-#define WINDOW_SIZE 10
+#define WINDOW_SIZE 50
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
 extern std::map<int, int> port_pid_map;
-extern std::map<int64_t, std::vector<Message>> recv_pending_map;
+extern std::map<int64_t, std::map<int, Message>> pending_msg_map;
+extern std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
 extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 extern std::unordered_set<std::string> pid_send_uset;
 extern std::vector<Parser::Host> hosts_vec;
@@ -171,8 +173,12 @@ void Logger::log_deliver(Message msg, int is_ack, int call_mode){
 
   // if not yet delivered and not in pending (ie new msg, could be from any sender), add to pendong. [] creates b_pid key
   if (delivered_map[b_pid].find(msg.msg) == delivered_map[b_pid].end()){
-    if (std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), msg) == recv_pending_map[b_pid].end()){
-       recv_pending_map[b_pid].push_back(msg);
+    if (pending_sn_uset[b_pid].find(msg.sn) == pending_sn_uset[b_pid].end()){
+    //if (std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), msg) == recv_pending_map[b_pid].end()){
+//       std::cout << "adding b" << b_pid << ' ' << msg.msg << " to relay" << std::endl;
+       pending_sn_uset[b_pid].insert(msg.sn);
+       pending_msg_map[b_pid][msg.sn] = msg;
+//       recv_pending_map[b_pid].push_back(msg);
   
       // this takes care of relay: i resend msgs that were sent to me (broadcasts, relays)
       // only if not yet in pending, add to relay list; one msg from a b_pid will be added to relay list only once
@@ -198,23 +204,28 @@ void Logger::log_deliver(Message msg, int is_ack, int call_mode){
     // attempt delivery: for all msg that is already in pending
 
     // check seq. num in pending from b_pid
-    auto next_msg_it = std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]); 
-    while ((next_msg_it != recv_pending_map[b_pid].end()) && ((*next_msg_it).sn == next_vec[b_pid-1])){
+//    auto next_msg_it = std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]); 
+//    while ((next_msg_it != recv_pending_map[b_pid].end()) && ((*next_msg_it).sn == next_vec[b_pid-1])){
+    while (pending_sn_uset[b_pid].find(next_vec[b_pid-1]) != pending_sn_uset[b_pid].end()){
+        Message next_msg = pending_msg_map[b_pid][next_vec[b_pid-1]];
+        assert(next_msg.sn==next_vec[b_pid-1]);
 
         // urb: if msg is not yet delivered and seen by more than half of procs
-        if ((delivered_map[b_pid].find((*next_msg_it).msg) == delivered_map[b_pid].end()) &&
-          (static_cast<float>(ack_seen_map[b_pid][(*next_msg_it).sn].size()) > 0.5*n_procs)){
-            delivered_map[b_pid].insert((*next_msg_it).msg);
+        if ((delivered_map[b_pid].find(next_msg.msg) == delivered_map[b_pid].end()) &&
+          (static_cast<float>(ack_seen_map[b_pid][next_msg.sn].size()) > 0.5*n_procs)){
+            //std::cout << "d " << b_pid << ' ' << next_msg.msg << std::endl;
+            delivered_map[b_pid].insert(next_msg.msg);
             LogMessage lm;
-            lm.m = (*next_msg_it);
+            lm.m = next_msg;
             lm.sender_pid = b_pid;
             lm.msg_type = 'd';
             lm_buffer[lm_idx] = lm;
             lm_idx++;
             if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer(call_mode);} // 100 msgs from different pids, but pid ordered
-            recv_pending_map[b_pid].erase(next_msg_it);
+            pending_sn_uset[b_pid].erase(next_msg.sn);
+            pending_msg_map[b_pid].erase(next_msg.sn);
             next_vec[b_pid-1]++;
-            next_msg_it = std::lower_bound(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]);
+//            next_msg_it = std::lower_bound(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]);
             }else{break;}  // end fifo deliver
         } // end urb deliver
   }
