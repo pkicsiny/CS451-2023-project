@@ -33,8 +33,6 @@
 
 Logger logger_p2p;
 std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
-//std::map<int64_t, std::vector<Message>> recv_pending_map;
-//std::map<int64_t, std::vector<Message>> delivered_map;
 std::map<int64_t, std::vector<Message>> recv_pending_map;
 std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
@@ -52,20 +50,6 @@ static void stop(int) {
   std::cout << "Immediately stopping network packet processing.\n";
   std::cout << "Writing output.\n";
   logger_p2p.log_lm_buffer(1);
-//  logger_p2p.print_pending();
-
-//  std::cout << "Msgs contained in ack_seen_map at end:" << std::endl;
-//  for (auto &mes : ack_seen_map){
-//     std::cout << "(b" << mes.first << ' ';
-//     for (auto &mes_sn: mes.second){
-//       std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes: ";
-//       for (auto &procc: mes_sn.second){
-//         std::cout << 'p' << procc << ' ';
-//       }
-//       std::cout << std::endl;
-//     }
-//   }
-//   std::cout << std::endl;
 
   // exit directly from signal handler
   exit(0);
@@ -284,14 +268,9 @@ int main(int argc, char **argv) {
   std::cout << "======================================================" << std::endl;
   std::cout << "Init complete. Broadcasting and delivering messages...\n\n";
 
-  // on senders (clients): create a socket and bind (assign address) this socket to the receiver
-  // on receiver (server): create a socket and listen for incoming events
-
   /*-----------*/
   // main loop //
   /*-----------*/
-
-  //usleep(100000);
 
   // my socket: AF_INET: IPv4, SOCK_DGRAM: UDP/IP
   if ((socket_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { 
@@ -311,7 +290,6 @@ int main(int argc, char **argv) {
   // set timeout on my socket
   setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
 
-  // S.A.R: send, ack, resend
   std::cout << "Start sending messages..." << std::endl;
 
   while(true){
@@ -335,7 +313,7 @@ int main(int argc, char **argv) {
         to_addr.sin_port = htons(to_host.port);  // port of receiving process
         int to_pid = port_pid_map[to_host.port];
 
-        // i resend but not relay msgs broadcasted from myself to myself: pending[my_pid][my_pid] fills up at first send
+        // pending[my_pid][my_pid] never fills up: i deliver myself immediately my own msgs
         // in this implementation relay = resend
         pl.resend(logger_p2p, socket_fd, to_addr, from_pid, to_pid); // resend all unacked messages once
       }

@@ -41,11 +41,13 @@ class Message {
 
     // compare a string to this message, this is used to remove acked from pending
     bool operator==(const std::string ack_msg) const {return ((msg == ack_msg) && (msg == ack_msg));}
+
+    // compare msg to int sequence number
+    bool operator==(const int sn_other) const {return (sn == sn_other);}
+    bool operator<(const int sn_other) const {return sn < sn_other;}
 };
 extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_map;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 extern unsigned int n_procs;  // urb, num_processes / 2
-//extern std::map<int64_t, std::vector<Message>> recv_pending_map;
-//extern std::map<int64_t, std::vector<Message>> delivered_map;
 extern std::map<int64_t, std::vector<Message>> recv_pending_map;
 extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 

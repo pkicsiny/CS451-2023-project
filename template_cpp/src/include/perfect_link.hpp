@@ -27,8 +27,6 @@
 #include "utils.hpp"
 
 extern std::map<int, int> port_pid_map;
-//extern std::map<int64_t, std::vector<Message>> recv_pending_map;
-//extern std::map<int64_t, std::vector<Message>> delivered_map;
 extern std::map<int64_t, std::vector<Message>> recv_pending_map;
 extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 

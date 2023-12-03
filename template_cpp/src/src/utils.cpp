@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <map>
 #include <unordered_set>
+#include <algorithm>
 #include "parser.hpp"
 
 #include <arpa/inet.h>  // hotnl etc.
@@ -60,15 +61,11 @@ void EncodeMessage(const Message& msg, std::vector<char>& msg_buffer, int packet
     size_t msg_size = msg.msg.size();
     uint32_t msg_ser_size = htonl(static_cast<uint32_t>(msg_size));  // 4 bytes encoding msg length
 
-//    std::cout << "encoding msg: " << msg.msg << std::endl;
-
     // order of serialized Message: [len_msg, msg, sn, b_pid, is_ack]
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&msg_ser_size), reinterpret_cast<char*>(&msg_ser_size) + sizeof(uint32_t));  // 4 bytes
-//    std::cout << "after encoding size: " << msg_buffer.size() << ", " << msg.msg.size() << std::endl;
     msg_buffer.insert(msg_buffer.end(), msg_ser, msg_ser + msg_size);  // 1 byte
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&sn_ser), reinterpret_cast<char*>(&sn_ser) + sizeof(uint32_t));  // 4 bytes
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&b_pid_ser), reinterpret_cast<char*>(&b_pid_ser) + sizeof(uint32_t));  // 4 bytes
-//    std::cout << "msg_buffer after encoding sn: " << msg_buffer.size() << " bytes" << std::endl;
 }
 
 Message DecodeMessage(const char* msg_buffer, size_t &offset) {  // offset=0 for first call
@@ -79,24 +76,20 @@ Message DecodeMessage(const char* msg_buffer, size_t &offset) {  // offset=0 for
     std::memcpy(&msg_ser_size, msg_buffer + offset, sizeof(uint32_t));
     size_t msg_size = ntohl(msg_ser_size);
     offset += sizeof(uint32_t);
-//    std::cout << "after decoding size: " << msg_size << ", offset: " << offset << std::endl;
 
     // decode msg
     msg.msg.assign(msg_buffer + offset, msg_size);
     offset += msg_size;
-//    std::cout << "after decoding msg: " << msg.msg << ", offset: " << offset << std::endl;
 
     // decocde sn
     std::memcpy(&(msg.sn), msg_buffer + offset, sizeof(uint32_t));
     msg.sn = ntohl(msg.sn);
     offset += sizeof(uint32_t);
-//    std::cout << "after decoding sn: " << msg.sn << ", offset: " << offset << std::endl;
 
     // decocde b_pid
     std::memcpy(&(msg.b_pid), msg_buffer + offset, sizeof(uint32_t));
     msg.b_pid = ntohl(msg.b_pid);
     offset += sizeof(uint32_t);
-//    std::cout << "after decoding b_pid: " << msg.b_pid << ", offset: " << offset << std::endl;
 
     return msg;
 }
@@ -110,8 +103,6 @@ void Logger::print_pending(){
 }
 
 void Logger::log_lm_buffer(int call_mode){
-  //std::cout << "Call mode: " << call_mode << std::endl;
-  // log into
   std::fstream output_file;
   output_file.open(output_path, std::ios_base::in | std::ios_base::app);
   bool do_log;
@@ -119,6 +110,7 @@ void Logger::log_lm_buffer(int call_mode){
 
   if (output_file.is_open()){
     for(int i = 0; i < lm_idx; i++) {
+
       do_log = true; // for each msg try to log by default
       std::stringstream ss; // stringstream containing a full log line
       if(lm_buffer[i].msg_type == 'b'){
@@ -126,7 +118,8 @@ void Logger::log_lm_buffer(int call_mode){
         //std::cout << ss.str();
       }else{
         ss << "d " << lm_buffer[i].sender_pid << ' ' << lm_buffer[i].m.msg << std::endl;
-        //std::cout << ss.str();
+//        std::cout << ss.str();
+//        if ((i==10) && (call_mode==0)){std::cout << "sleep" << std::endl; output_file.close(); sleep(100000);}
       }
       do_log = check_dupes(do_log, output_file, ss, call_mode, last_lm_idx, i); // check if msg already in logfile (relevant after sigterm/int)
       if (do_log){output_file << ss.str();}
@@ -146,17 +139,19 @@ Logger::Logger(const char* op, int pid){
   my_pid = pid;
 }
 
+
+// when sigterm issued while logging: part of log buffer is logged, sigterm log call relogs full chunk, some can be dupes
 bool Logger::check_dupes(bool& do_log, std::fstream& output_file, std::stringstream& desired_line, int call_mode, int& last_lm_idx, int i){
+
+  // this is called only upon sigterm/sigint
   if ((call_mode==1) && (i==last_lm_idx+1)){
     std::string cur_line;
-//    std::cout << "looking for: " << desired_line.str() << std::endl;
     output_file.seekg(0, std::ios::beg);  // move get (read) pointer to start
     while (std::getline(output_file, cur_line)) {
-      if (std::cin.good()) {cur_line += '\n';} // if there should be nl and nl (relevant at last line)
-      bool equal = cur_line == desired_line.str(); 
-  //    std::cout << "success: " << cur_line << "==" << desired_line.str() << "equal?: "<< equal << std::endl;
+      if (std::cin.good()) {cur_line += '\n';} // if there should be nl add nl (relevant at last line)
+
+      // check if line already in log file
       if (cur_line == desired_line.str()) {
-    //    std::cout << "found " << desired_line.str() << " already in log. Not logging this." << std::endl;
         do_log = false;
         last_lm_idx = i;
         break;  // exit while loop, dont log this line
@@ -172,17 +167,12 @@ bool Logger::check_dupes(bool& do_log, std::fstream& output_file, std::stringstr
 
 void Logger::log_deliver(Message msg, int is_ack, int call_mode){
 
-//  std::cout << "ack_seen_map[msg].size: " << ack_seen_map[msg].size() << ", n_procs / 2: " << 0.5*n_procs << std::endl;
   int b_pid = msg.b_pid;
-
-
-//  if (recv_pending_map[b_pid].find(msg.msg) == recv_pending_map[b_pid].end()){
 
   // if not yet delivered and not in pending (ie new msg, could be from any sender), add to pendong. [] creates b_pid key
   if (delivered_map[b_pid].find(msg.msg) == delivered_map[b_pid].end()){
     if (std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), msg) == recv_pending_map[b_pid].end()){
        recv_pending_map[b_pid].push_back(msg);
-      // std::cout << "adding b" << b_pid << ' ' << msg.msg << " to relay" << std::endl;
   
       // this takes care of relay: i resend msgs that were sent to me (broadcasts, relays)
       // only if not yet in pending, add to relay list; one msg from a b_pid will be added to relay list only once
@@ -206,30 +196,27 @@ void Logger::log_deliver(Message msg, int is_ack, int call_mode){
   if (new_ack){
     new_ack = false;
     // attempt delivery: for all msg that is already in pending
-    std::sort(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end());
-    auto it = recv_pending_map[b_pid].begin();
-    while(it != recv_pending_map[b_pid].end()) {
-   
+
+    // check seq. num in pending from b_pid
+    auto next_msg_it = std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]); 
+    while ((next_msg_it != recv_pending_map[b_pid].end()) && ((*next_msg_it).sn == next_vec[b_pid-1])){
+
         // urb: if msg is not yet delivered and seen by more than half of procs
-        if ((delivered_map[b_pid].find((*it).msg) == delivered_map[b_pid].end()) &&
-          (static_cast<float>(ack_seen_map[b_pid][(*it).sn].size()) > 0.5*n_procs)){
-  
-          // fifo: if this is the next sn
-          if((*it).sn == next_vec[b_pid-1]) {
-            next_vec[b_pid-1]++;
-            //std::cout << "d " << (*it).b_pid << ' ' << (*it).msg << std::endl;
-            delivered_map[b_pid].insert((*it).msg);
+        if ((delivered_map[b_pid].find((*next_msg_it).msg) == delivered_map[b_pid].end()) &&
+          (static_cast<float>(ack_seen_map[b_pid][(*next_msg_it).sn].size()) > 0.5*n_procs)){
+            delivered_map[b_pid].insert((*next_msg_it).msg);
             LogMessage lm;
-            lm.m = *it;
+            lm.m = (*next_msg_it);
             lm.sender_pid = b_pid;
             lm.msg_type = 'd';
             lm_buffer[lm_idx] = lm;
             lm_idx++;
             if(lm_idx == MAX_LOG_PERIOD){log_lm_buffer(call_mode);} // 100 msgs from different pids, but pid ordered
-            it = recv_pending_map[b_pid].erase(it);
-            }else{it++;}  // end fifo deliver
-        }else{it++;} // end urb deliver
-    } // end while
+            recv_pending_map[b_pid].erase(next_msg_it);
+            next_vec[b_pid-1]++;
+            next_msg_it = std::lower_bound(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]);
+            }else{break;}  // end fifo deliver
+        } // end urb deliver
   }
 }
 
@@ -254,33 +241,9 @@ void Logger::log_broadcast(Message msg, int call_mode){
 
 void Logger::add_to_ack_seen(Message msg, int sender_pid, int is_ack){
 
-//   std::cout << "Msgs contained in ack_seen_map before:" << std::endl;
-//   for (auto &mes : ack_seen_map){
-//      std::cout << "(b" << mes.first << ' ';
-//      for (auto &mes_sn: mes.second){
-//        std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes." << std::endl;
-//     }
-//   }
-//   std::cout << std::endl;
-
   // [] creates keys if doesnt already exist
   if (ack_seen_map[msg.b_pid][msg.sn].find(sender_pid) == ack_seen_map[msg.b_pid][msg.sn].end()){
     ack_seen_map[msg.b_pid][msg.sn].insert(sender_pid);
     new_ack = true;
-    //std::cout << "msg b" << msg.b_pid << ' ' << msg.msg << " is now seen by pid: "<< sender_pid << std::endl;
-    // attempt urb delivery
-    //log_deliver(msg, is_ack);
    }
-//if(is_ack==1){std::cout << std::endl;}
-//     std::cout << "Msgs contained in ack_seen_map after:" << std::endl;
-
-//     for (auto &mes : ack_seen_map){
-//       std::cout << "(b" << mes.first << ' ';
-//       for (auto &mes_sn: mes.second){
-//         std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes." << std::endl;
-//     }
-//   }
-//   std::cout << std::endl;
 }
-
-
