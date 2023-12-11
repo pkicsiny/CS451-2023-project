@@ -36,23 +36,22 @@ extern std::vector<Parser::Host> hosts_vec;
 extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_map;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 extern unsigned int n_procs;  // urb, num_processes / 2
 extern std::vector<int> next_vec;  // fifo
+extern std::vector<Message> proposal;
 
 class PerfectLink{
   public:
+    PerfectLink(int, int, std::vector<Parser::Host> hosts_vec);
+
     int my_pid;
+    int n_procs;
     size_t prev_size;
-    char ack_buf[1024];
+    std::vector<Parser::Host> hosts_vec;
+
+    std::vector<char> create_send_packet(MessageList&, Logger&, int);
     std::vector<bool> lock_send_vec;  // lock_send_vec[pid-1], sliding window, stops sending new msgs to pid until this proc acked all msgs previously sent to pid
-    std::vector<int> total_resent;
-    std::vector<int> total_ack_sent;
-    std::vector<int> total_recv;
-    std::vector<int> total_ack_recv;
 
-    PerfectLink(int);
-
-    void send(MessageList&, Logger&, int, sockaddr_in);
-    void recv_ack(Logger&, int);
+    void broadcast(std::vector<Message>, std::map<int, std::vector<int>>&, Logger&, int, sockaddr_in);
+    void send(std::vector<char>, sockaddr_in, int, int);
+    void recv(Logger&, int,  std::vector<bool>&);
     void resend(Logger&, int, sockaddr_in, int, int);
-    void recv(Logger&, int);
-
 };

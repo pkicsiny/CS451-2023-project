@@ -51,43 +51,10 @@ extern unsigned int n_procs;  // urb, num_processes / 2
 extern std::map<int64_t, std::map<int, Message>> pending_msg_map;
 extern std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
 extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
-
-struct MessageList{
-  std::vector<Message> msg_list;
-  int sn_idx;
-  int msg_remaining;
-
-  // this is there so that I can send MAX_INT wo filling up the RAM
-  void refill(int, int);
-};
-
-// for assignment full msg size is: 4+x+4=12 8+x bytes
-// serialize a single message into msg_buffer which contains all msg in packet
-void EncodeMessage(const Message&, std::vector<char>&, int);
-Message DecodeMessage(const char*, size_t &);
-
-class Ack {
-  public:
-    int pid;  // process id of sender
-    int b_pid;  // pid of original broadcaster
-    int sn;  // sequence number
-    std::string msg;  // actual message string  
-
-    Ack();
-    Ack(int, int, std::string);
-
-    // compare 2 ack messages
-    bool operator==(const Ack &a) const {return ((b_pid == a.b_pid) && (sn == a.sn) && (msg == a.msg) && (pid == a.pid));}
-    bool operator<(const Ack &a) const {return sn < a.sn;}
-
-    // compare an ack message with a message
-    bool operator==(const Message &m) const {return ((sn == m.sn) && (msg == m.msg));}
-};
+extern std::vector<Message> proposal;
 
 struct LogMessage {
-  char msg_type;
-  int sender_pid;
-  Message m; 
+  std::string line; 
 };
 
 class Logger {
@@ -95,20 +62,66 @@ class Logger {
     const char* output_path;
     std::ostringstream ss;
     int my_pid;
-    std::map<int, std::map<int, std::vector<Message>>> relay_map; 
+    std::map<int, std::map<int, std::map<int, std::vector<char>>>< resend_map; 
 
     Logger ();
     Logger (const char*, int);
 
-    int lm_idx;
-    LogMessage* lm_buffer;
+    int ld_idx;
+    LogMessage* ld_buffer;
     bool new_ack=false;
 
     void print_pending();
-    void log_lm_buffer(int);
+    void log_ld_buffer(int);
     bool check_dupes(bool&, std::fstream&, std::stringstream&, int, int&, int);
-    void log_broadcast(Message, int);
-    void log_deliver(Message, int, int);
-    void add_to_ack_seen(Message, int, int);
+    void log_decide(std::vector<std::string>, int);
+    void init_new_consensus();
 };
 
+
+class LatticeAgreement{
+  public:
+    int c_idx;  // consensus index
+    int apn;  // active proposal number
+    int ack_count;
+    int nack_count;
+    Logger* logger_p2p;
+    PerfectLink* pl;
+
+    LatticeAgreement (int);
+    void init_next_consensus();
+    void try_decide(std::vector<std::string>);
+}
+
+LatticeAgreement::LatticeAgreement(){
+  this->ack_count = 0;
+  this->nack_count = 0;
+  this->apn = 1;
+  this->c_idx = 1;
+}
+
+void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec){
+
+  // if i get a single nack it means my proposal has changed: broadcast it
+  if (nack_cout>0){
+    apn++;
+    ack_count = 0;
+    nack_count = 0;
+    pl.do_broadcast=true;
+  }
+
+  // need ack from at least half of processes (excluding myself bc from myself I automatically get my proposed_vec)
+  if (ack_count>0.5*static_cast<float>(n_procs)){  // checks the ack_cout of the current c_idx only
+    logger_p2p.log_decide(proposed_vec, 0)  // decide proposed_set = log to output file
+    init_consensus_vars();  // move to next consensus
+  }
+}
+
+void LatticeAgreement::init_new_consensus(){
+  ack_count = 0;
+  nack_count = 0;
+  apn++;
+  c_idx++;
+
+  // take next line from config as proposed_vec
+}

@@ -26,6 +26,7 @@
 
 #include "utils.hpp"
 #include "perfect_link.hpp"
+//#include "beb.hpp"
 
 /*-------*/
 // begin //
@@ -38,11 +39,10 @@ std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
 
 std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
-std::unordered_set<std::string> pid_send_uset;
 std::vector<Parser::Host> hosts_vec;
-std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_map;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 unsigned int n_procs = 0;
-std::vector<int> next_vec;
+std::vector<std::string> proposed_vec;
+std::vector<std::string> accepted_vec;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -120,10 +120,7 @@ int main(int argc, char **argv) {
     n_procs++;
     //std::cout << "port: " << host.port << ": process ID " << port_pid_map[host.port] << std::endl;
   }
-  std::cout << "there are " << n_procs << " processes in the execution." << std::endl;
-
-  // fifo: num_procs lists of sequence numbers, all initted with 0
-  next_vec.resize(n_procs, 0);
+  std::cout << "There are " << n_procs << " processes in the execution." << std::endl;
 
   /*-------------*/
   // init logger //
@@ -139,112 +136,60 @@ int main(int argc, char **argv) {
   // read config file //
   /*------------------*/
 
-  std::map<int, MessageList> msg_list_vec;
-  unsigned int p = 1;
-  while (p<=n_procs){
-    msg_list_vec[p].sn_idx = 0;
-    p++;
-  }
+  // list of sequence numbers that I need to send a given pid
+  std::map<int, std::map<int, std::vector<int>>> sn_vec_map;
 
-  int NUM_MSG = -1;
-  if (requireConfig){
-    std::string l_in;
-    std::ifstream config_file;
-    std::vector<int> config_file_content_vec;
-    config_file.open (parser.configPath());
+  int NUM_PROPOSALS = -1;
+  int MAX_LEN_PROPOSAL = -1;
+  int NUM_DISTINCT_ELEMENTS = -1;
+  std::string l_header, l_header_int, l_line, l_line_int;
+  std::ifstream config_file;
+  std::vector<int> config_file_header;
+  std::vector<std::string> proposed_vec;
+  config_file.open(parser.configPath());
 
-    if (config_file.is_open()){
-      while (getline(config_file, l_in, ' ')){
-        //std::cout << l_in << std::endl;
-        config_file_content_vec.push_back(std::stoi(l_in));
-      }
-      NUM_MSG = config_file_content_vec[0];  // num messages sent by each process
-      assert(NUM_MSG<=MAX_MSG_SN+1);
-      config_file.close();
-    }else{
-      std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;
-      return -1;
-    }
+  if (config_file.is_open()){
     
-    if (NUM_MSG == -1){
-      std::cout << "[ERROR] Reading config failed. NUM_MSG: " << NUM_MSG << std::endl;
-      return -1;
-    }else{
-      std::cout << "Config successfully read. Send " << NUM_MSG << " messages to all (" << n_procs << ") processes\n\n";
-
-      p = 1;
-      while(p<=n_procs){
-        msg_list_vec[p].msg_remaining = NUM_MSG;
-        msg_list_vec[p].refill(my_pid, 0);
-        p++;
+    // get first line of config: p, vs, ds
+    if(getline(config_file, l_header)){
+      while (getline(l_header, l_header_int, ' ')){
+        std::cout << l_header_int << std::endl;
+        config_file_header.push_back(std::stoi(l_header_int));
       }
     }
-  }else{  // if no config, read from inout stream or something
+    NUM_PROPOSALS = config_file_header[0];
+    MAX_LEN_PROPOSAL = config_file_header[1];
+    NUM_DISTRINCT_ELEMENTS = config_file_header[2];
 
-    std::cout << "Enter the number of messages: ";
-    std::cin >> NUM_MSG;
+    // init lattice agreement
+    LatticeAgreement la();
+
+    if (getline(config_file, l_line) && la.apn <= NUM_PROPOSALS)
+      while (getline(l_line, l_line_int, ' ')){
+        std::cout << l_line_int << std::endl;
+        proposed_vec.push_back(l_line_int);  // these are strings
+      }
+    }
+    config_file.close();
+  }else{
+    std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;
+    return -1;
+  }
   
-    // check for correctness of input (this handles overflow)
-    while (!std::cin.good())
-    {
-      
-      // reset and ignore rest of cin (e.g. upon overflown input the cin is capped at max int)
-      std::cin.clear();
-      std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  if (NUM_PROPOSALS == -1 || MAX_LEN_PROPOSAL == -1 || NUM_DISTINCT_ELEMENTS == 1){
+    std::cout << "[ERROR] Reading config failed. NUM_PROPOSALS: " << NUM_PROPOSALS << ", MAX_LEN_PROPOSAL: "<< MAX_LEN_PROPOSAL << ", NUM_DISTINCT_ELEMENTS: " << NUM_DISTINCT_ELEMENTS << std::endl;
+    return -1;
+  }else{
+    std::cout << "Config successfully read. NUM_PROPOSALS: " << NUM_PROPOSALS << ", MAX_LEN_PROPOSAL: "<< MAX_LEN_PROPOSAL << ", NUM_DISTINCT_ELEMENTS: " << NUM_DISTINCT_ELEMENTS << std::endl;
 
-      // ask again
-      std::cout << "Enter the number of messages: ";
-      std::cin >> NUM_MSG;
-    }
-    // reset and ignore rest of cin
-    std::cin.clear();
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-    // at this point NUM_MSG is a valid int, but it has to be >0
-    if (NUM_MSG<=0){
-      std::cout << "NUM_MSG is invalid: " << NUM_MSG << std::endl;
-      return -1;
-    }
-
-    // cin the UNIQUE messages and push back to msg_list; one msg is the full line
-    std::string msg_cin_buf;
-
-    p = 1;
-    while(p<=n_procs){
-      msg_list_vec[p].msg_remaining = NUM_MSG;
-      p++;
-    }
-
-    MessageList msg_list_user;
-    for (int i=0; i<NUM_MSG; i++){
-      std::cout << "Message " << i+1 << ": ";
-      std::getline(std::cin, msg_cin_buf);
-
-      // msg_list has to be unique, keep while msg_cin_buf is in msg_list
-      while (std::find_if(msg_list_user.msg_list.begin(), msg_list_user.msg_list.end(), [&msg_cin_buf](const Message& m) {return m.msg == msg_cin_buf;}) != msg_list_user.msg_list.end()){
-  
-        // ask again
-        std::cout << "Message " << i+1 << ": ";
-        std::getline(std::cin, msg_cin_buf);
-      }  
-
-      msg_list_user.msg_list.push_back(Message(my_pid, msg_list_user.sn_idx, msg_cin_buf, 0));  // sequencing starts from 0
-      msg_list_user.sn_idx++;
-      msg_list_user.msg_remaining--;
-    }
-    p = 1;
-    while (p<=n_procs){
-      msg_list_vec[p] = msg_list_user;
-      p++;
-    }
   }
 
   /*---------------------*/
   // create pending list //
   /*---------------------*/
  
-  std::map<int, std::map<int, std::vector<Message>>> relay_map;  // keys are not initted
-  logger_p2p.relay_map = relay_map;
+  std::map<int, std::vector<Message>> resend_map;  // keys are not initted
+  logger_p2p.resend_map = resend_map;
 
   /*----------------*/
   // set my IP:port //
@@ -256,18 +201,8 @@ int main(int argc, char **argv) {
   int my_port = hosts_vec[parser.id()-1].port;
   std::cout << "My socket: " << my_ip << ":" << my_port << ", my process ID: " << my_pid << "\n\n";
 
-  // create perfect link object
-  PerfectLink pl(my_pid);
-  std::vector<bool> lock_send_vec(n_procs, false);
-  std::vector<int> total_resent(n_procs, 0);
-  std::vector<int> total_ack_sent(n_procs, 0);
-  std::vector<int> total_recv(n_procs, 0);
-  std::vector<int> total_ack_recv(n_procs, 0);  
-  pl.lock_send_vec = lock_send_vec;
-  pl.total_resent = total_resent;
-  pl.total_ack_sent = total_ack_sent;
-  pl.total_recv = total_recv;
-  pl.total_ack_recv = total_ack_recv;
+  // create beb object, uses inside a pl object
+  PerfectLink pl(my_pid, n_procs, hosts_vec);
 
   /*---------------*/
   // create socket //
@@ -310,28 +245,10 @@ int main(int argc, char **argv) {
 
   while(true){
 
-    for (auto &host : hosts_vec) {
-      // config other address
-      to_addr.sin_family = AF_INET; 
-      to_addr.sin_addr.s_addr = inet_addr(host.ipReadable().c_str()); //INADDR_ANY;  
-      to_addr.sin_port = htons(host.port);  // port of receiving process
-      pl.send(msg_list_vec[int(host.id)], logger_p2p, socket_fd, to_addr); // send some messages once
-    }
-    pl.recv(logger_p2p, socket_fd); // receive messages from other process
-    for (auto &from_host : hosts_vec) {
-      from_addr.sin_family = AF_INET; 
-      from_addr.sin_addr.s_addr = inet_addr(from_host.ipReadable().c_str()); //INADDR_ANY;  
-      from_addr.sin_port = htons(from_host.port);  // port of receiving process
-      int from_pid = port_pid_map[from_host.port];
-      for (auto &to_host : hosts_vec){
-        to_addr.sin_family = AF_INET; 
-        to_addr.sin_addr.s_addr = inet_addr(to_host.ipReadable().c_str()); //INADDR_ANY;  
-        to_addr.sin_port = htons(to_host.port);  // port of receiving process
-        int to_pid = port_pid_map[to_host.port];
-
-        // pending[my_pid][my_pid] never fills up: i deliver myself immediately my own msgs
-        // in this implementation relay = resend
-        pl.resend(logger_p2p, socket_fd, to_addr, from_pid, to_pid); // resend all unacked messages once
+    pl.broadcast(proposed_vec, logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
+    pl.recv(logger_p2p, socket_fd, pl.lock_send_vec); // receive messages from other process
+    pl.resend(logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // resend all unacked messages once
+    la.try_decide();
       }
     }
   }  // end while send
