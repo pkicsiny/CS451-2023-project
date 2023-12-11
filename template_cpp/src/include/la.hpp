@@ -36,7 +36,7 @@ class LatticeAgreement {
     Logger* logger_p2p;
     PerfectLink* pl(int, int, std::vector<Parser::Host>);
 
-    LatticeAgreement (int);
+    LatticeAgreement ();
     void init_next_consensus();
     void try_decide(std::vector<std::string>);
 };

@@ -11,6 +11,8 @@
 #include <unordered_set>
 #include <algorithm>
 #include "assert.h"
+#include <numeric>
+
 #include "parser.hpp"
 
 #include <arpa/inet.h>  // hotnl etc.
@@ -29,27 +31,8 @@ extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
 extern std::vector<std::string> proposed_vec;
 
-Message::Message(){}
-Message::Message(int broadcaster_pid, int sequencenumber, std::string message) {
-      b_pid = broadcaster_pid;
-      sn = sequencenumber;
-      msg = message;
-}
-
-// this is there so that I can send MAX_INT wo filling up the RAM
-void MessageList::refill(int b_pid, int is_ack){
-    int msg_list_chunk_size = std::min(MAX_MSG_LIST_SIZE, msg_remaining);
-    for(auto ii=0; ii<msg_list_chunk_size; ii++){
-      msg_list.push_back(Message(b_pid, sn_idx, std::to_string(sn_idx+1), is_ack));  // sequencing starts from 0
-      sn_idx++;  // goes up to NUM_MSG
-      msg_remaining--;  // goes down to 0
-    }
-    //std::cout << "Message list refilled with " << msg_list.size() << " messages." << std::endl;
-  }
-
-
 void EncodeMetadata(std::vector<char>& msg_buffer, int b_pid, int is_ack, int active_proposal_number){
-    uint32_t b_pid_ser = htonl(msg.b_pid);  // 4 bytes encoding original sender pid in network byte order; b_pid num is max. 128
+    uint32_t b_pid_ser = htonl(b_pid);  // 4 bytes encoding original sender pid in network byte order; b_pid num is max. 128
     uint32_t is_ack_ser = htonl(is_ack);
     uint32_t apn_ser = htonl(active_proposal_number);
 
@@ -63,7 +46,7 @@ void EncodeMetadata(std::vector<char>& msg_buffer, int b_pid, int is_ack, int ac
 
 void EncodeProposal(std::vector<std::string> proposal, std::vector<char>& msg_buffer) {
 
-    size_t num_elements = proposal.size();
+    size_t num_elements = proposal.size();
     uint32_t num_elements_ser = htonl(static_cast<uint32_t>(num_elements));
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&num_elements_ser), reinterpret_cast<char*>(&num_elements_ser) + sizeof(uint32_t));  // 4 bytes
 
@@ -76,7 +59,7 @@ void EncodeProposal(std::vector<std::string> proposal, std::vector<char>& msg_bu
 
       msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&proposal_i_ser_size), reinterpret_cast<char*>(&proposal_i_ser_size) + sizeof(uint32_t));  // 4 bytes
       msg_buffer.insert(msg_buffer.end(), proposal_i_ser, proposal_i_ser + proposal_i_size);  // 1 byte
-
+    }
 }
 
 void DecodeMetadata(const char* msg_buffer, int& b_pid, int& is_ack, int& apn, size_t& offset){
@@ -105,22 +88,24 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
     std::vector<std::string> decoded_proposal;
 
     // get number of elements in proposal
-    uint32_t num_elements;
-    std::memcpy(&num_elements, msg_buffer + offset, sizeof(uint32_t));
-    size_t num_elements = ntohl(num_elements);
+    uint32_t num_elements_ser;
+    std::memcpy(&num_elements_ser, msg_buffer + offset, sizeof(uint32_t));
+    size_t num_elements = ntohl(num_elements_ser);
     offset += sizeof(uint32_t);
 
-    for (int n=0; n<num_elements; n++){
+    for (size_t n=0; n<num_elements; n++){
 
       // proposal_i_size
-      std::memcpy(&(proposal_i_size), proposal_i_size + offset, sizeof(uint32_t));
-      proposal_i_size = ntohl(proposal_i_size);
+      uint32_t proposal_i_ser_size;
+      std::memcpy(&(proposal_i_ser_size), msg_buffer + offset, sizeof(uint32_t));
+      size_t proposal_i_size = ntohl(proposal_i_ser_size);
       offset += sizeof(uint32_t);
 
       // decode proposal_i
       std::string proposal_i;
       proposal_i.assign(msg_buffer + offset, proposal_i_size);
       offset += proposal_i_size;
+    }
 
     return decoded_proposal;
 }
@@ -139,7 +124,6 @@ void Logger::log_ld_buffer(int call_mode){
       std::stringstream ss; // stringstream containing a full log line
       ss << ld_buffer[i].line;
 //        if ((i==10) && (call_mode==0)){std::cout << "sleep" << std::endl; output_file.close(); sleep(100000);}
-      }
       do_log = check_dupes(do_log, output_file, ss, call_mode, last_ld_idx, i); // check if msg already in logfile (relevant after sigterm/int)
       if (do_log){output_file << ss.str();}
     }

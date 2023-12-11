@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
   logger_p2p.output_path = parser.outputPath();
   logger_p2p.my_pid = my_pid;
   std::cout << "Initialized logger at: " << logger_p2p.output_path << "\n\n";
-  logger_p2p.ld_buffer = new LogMessage[MAX_LOG_PERIOD];
+  logger_p2p.ld_buffer = new LogDecision[MAX_LOG_PERIOD];
   logger_p2p.ld_idx = 0;
 
   /*------------------*/
@@ -145,25 +145,34 @@ int main(int argc, char **argv) {
   config_file.open(parser.configPath());
 
   // init lattice agreement
-  LatticeAgreement la();
+  LatticeAgreement la;
 
   if (config_file.is_open()){
     
     // get first line of config: p, vs, ds
     if(getline(config_file, l_header)){
-      while (getline(l_header, l_header_int, ' ')){
-        std::cout << l_header_int << std::endl;
-        config_file_header.push_back(std::stoi(l_header_int));
+      std::istringstream iss(l_header);
+      while(iss){
+      std::string l_header_i;
+        iss >> l_header_i;
+        if (!l_header_i.empty()) {
+            config_file_header.push_back(std::stoi(l_header_i));
+        }
       }
     }
     NUM_PROPOSALS = config_file_header[0];
     MAX_LEN_PROPOSAL = config_file_header[1];
     NUM_DISTINCT_ELEMENTS = config_file_header[2];
 
+    // read a proposal set (single line in config)
     if (getline(config_file, l_line) && la.apn <= NUM_PROPOSALS){
-      while (getline(l_line, l_line_int, ' ')){
-        std::cout << l_line_int << std::endl;
-        proposed_vec.push_back(l_line_int);  // these are strings
+      std::istringstream iss(l_line);
+      while(iss){
+      std::string l_header_i;
+        iss >> l_header_i;
+        if (!l_header_i.empty()) {
+            proposed_vec.push_back(l_header_i);
+        }
       }
     }
     config_file.close();
@@ -244,7 +253,7 @@ int main(int argc, char **argv) {
     pl.broadcast(proposed_vec, logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
     pl.recv(logger_p2p, socket_fd); // receive messages from other process
     pl.resend(logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // resend all unacked messages once
-    la.try_decide();
+    la.try_decide(proposed_vec);
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;

@@ -34,12 +34,12 @@ extern std::map<int, int> port_pid_map;
 
 extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::vector<std::string> proposed:vec;
+extern std::vector<std::string> proposed_vec;
 
 PerfectLink::PerfectLink(int my_pid, int n_procs, std::vector<Parser::Host> hosts_vec){
   this->my_pid = pid;
   this->n_procs = n_procs;
-  this->hosts_vec = hosts_vec;
+  this->hosts_vec = hosts_vec;
 }
 
 // msg_list is the proposal set
@@ -68,7 +68,7 @@ void PerfectLink::broadcast(std::vector<std::string> proposed_vec, Logger& logge
         pl.send(msg_packet, to_addr, to_pid, socket_fd);
       }
     } // end for loop on hosts  
-  this->do_broadcast = false;
+  this->do_broadcast = false;
   }  // end if do_broadcast
 } // end send()
 
@@ -202,7 +202,7 @@ void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
             send_ack(nack_packet, from_addr, socket_fd);
           }
         }else{
-          if (my_apn == apn_recv){
+          if (my_apn == apn_recv){
             // only 1 proposal for each [c_idx, apn, pid] key; if not in map then map remains unmodified; delete a msg = stop resend
             logger_p2p.resend_map[c_idx][apn_recv].erase(sender_pid);
 
