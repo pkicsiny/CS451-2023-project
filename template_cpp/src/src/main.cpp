@@ -26,7 +26,7 @@
 
 #include "utils.hpp"
 #include "perfect_link.hpp"
-//#include "beb.hpp"
+#include "la.hpp"
 
 /*-------*/
 // begin //
@@ -34,10 +34,6 @@
 
 Logger logger_p2p;
 std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
-std::map<int64_t, std::map<int, Message>> pending_msg_map;
-std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
-
-std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
 std::vector<Parser::Host> hosts_vec;
 unsigned int n_procs = 0;
@@ -51,7 +47,7 @@ static void stop(int) {
 
   std::cout << "Immediately stopping network packet processing.\n";
   std::cout << "Writing output.\n";
-  logger_p2p.log_lm_buffer(1);
+  logger_p2p.log_ld_buffer(1);
 
 /*
   std::cout << "Msgs contained in ack_seen_map at end:" << std::endl;
@@ -129,8 +125,8 @@ int main(int argc, char **argv) {
   logger_p2p.output_path = parser.outputPath();
   logger_p2p.my_pid = my_pid;
   std::cout << "Initialized logger at: " << logger_p2p.output_path << "\n\n";
-  logger_p2p.lm_buffer = new LogMessage[MAX_LOG_PERIOD];
-  logger_p2p.lm_idx = 0;
+  logger_p2p.ld_buffer = new LogMessage[MAX_LOG_PERIOD];
+  logger_p2p.ld_idx = 0;
 
   /*------------------*/
   // read config file //
@@ -148,6 +144,9 @@ int main(int argc, char **argv) {
   std::vector<std::string> proposed_vec;
   config_file.open(parser.configPath());
 
+  // init lattice agreement
+  LatticeAgreement la();
+
   if (config_file.is_open()){
     
     // get first line of config: p, vs, ds
@@ -157,14 +156,11 @@ int main(int argc, char **argv) {
         config_file_header.push_back(std::stoi(l_header_int));
       }
     }
-    NUM_PROPOSALS = config_file_header[0];
-    MAX_LEN_PROPOSAL = config_file_header[1];
-    NUM_DISTRINCT_ELEMENTS = config_file_header[2];
+    NUM_PROPOSALS = config_file_header[0];
+    MAX_LEN_PROPOSAL = config_file_header[1];
+    NUM_DISTINCT_ELEMENTS = config_file_header[2];
 
-    // init lattice agreement
-    LatticeAgreement la();
-
-    if (getline(config_file, l_line) && la.apn <= NUM_PROPOSALS)
+    if (getline(config_file, l_line) && la.apn <= NUM_PROPOSALS){
       while (getline(l_line, l_line_int, ' ')){
         std::cout << l_line_int << std::endl;
         proposed_vec.push_back(l_line_int);  // these are strings
@@ -176,7 +172,7 @@ int main(int argc, char **argv) {
     return -1;
   }
   
-  if (NUM_PROPOSALS == -1 || MAX_LEN_PROPOSAL == -1 || NUM_DISTINCT_ELEMENTS == 1){
+  if (NUM_PROPOSALS == -1 || MAX_LEN_PROPOSAL == -1 || NUM_DISTINCT_ELEMENTS == -1){
     std::cout << "[ERROR] Reading config failed. NUM_PROPOSALS: " << NUM_PROPOSALS << ", MAX_LEN_PROPOSAL: "<< MAX_LEN_PROPOSAL << ", NUM_DISTINCT_ELEMENTS: " << NUM_DISTINCT_ELEMENTS << std::endl;
     return -1;
   }else{
@@ -188,7 +184,7 @@ int main(int argc, char **argv) {
   // create pending list //
   /*---------------------*/
  
-  std::map<int, std::vector<Message>> resend_map;  // keys are not initted
+  std::map<int, std::map<int, std::map<int, std::vector<char>>>> resend_map;  // keys are not initted
   logger_p2p.resend_map = resend_map;
 
   /*----------------*/
@@ -246,11 +242,9 @@ int main(int argc, char **argv) {
   while(true){
 
     pl.broadcast(proposed_vec, logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
-    pl.recv(logger_p2p, socket_fd, pl.lock_send_vec); // receive messages from other process
+    pl.recv(logger_p2p, socket_fd); // receive messages from other process
     pl.resend(logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // resend all unacked messages once
     la.try_decide();
-      }
-    }
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;

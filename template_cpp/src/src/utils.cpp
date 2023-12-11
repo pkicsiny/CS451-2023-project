@@ -24,16 +24,10 @@
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
 extern std::map<int, int> port_pid_map;
-extern std::map<int64_t, std::map<int, Message>> pending_msg_map;
-extern std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
-extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
-extern std::unordered_set<std::string> pid_send_uset;
 extern std::vector<Parser::Host> hosts_vec;
 
-extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_map;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::vector<int> next_vec;  // fifo
-extern std::vector<std::string> proposal;
+extern std::vector<std::string> proposed_vec;
 
 Message::Message(){}
 Message::Message(int broadcaster_pid, int sequencenumber, std::string message) {

@@ -31,18 +31,10 @@
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
 extern std::map<int, int> port_pid_map;
-extern std::map<int64_t, std::map<int, Message>> pending_msg_map;
-extern std::map<int64_t, std::unordered_set<int>> pending_sn_uset;
-extern std::map<int64_t, std::unordered_set<std::string>> delivered_map;
 
-extern std::unordered_set<std::string> pid_send_uset;
 extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::map<int, std::map<int, std::unordered_set<int>>> ack_seen_dict;  // urb, ack[msg.b_pid][msg.sn]=[sender_ids]
-extern std::vector<int> next_vec;  // fifo
-extern std::vector<int> proposal;
-extern size_t len_current_proposal;
-extern int num_packets_proposal;
+extern std::vector<std::string> proposed:vec;
 
 PerfectLink::PerfectLink(int my_pid, int n_procs, std::vector<Parser::Host> hosts_vec){
   this->my_pid = pid;
@@ -141,7 +133,7 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
 } // end resend()
 
 
-void PerfectLink::recv(Logger& logger_p2p, int socket_fd, std::vector<bool>& lock_send_vec){
+void PerfectLink::recv(Logger& logger_p2p, int socket_fd){
 
   // address of sender
   sockaddr_in from_addr;

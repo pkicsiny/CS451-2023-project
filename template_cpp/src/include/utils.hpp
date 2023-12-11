@@ -62,7 +62,7 @@ class Logger {
     const char* output_path;
     std::ostringstream ss;
     int my_pid;
-    std::map<int, std::map<int, std::map<int, std::vector<char>>>< resend_map; 
+    std::map<int, std::map<int, std::map<int, std::vector<char>>>> resend_map; 
 
     Logger ();
     Logger (const char*, int);
@@ -78,50 +78,3 @@ class Logger {
     void init_new_consensus();
 };
 
-
-class LatticeAgreement{
-  public:
-    int c_idx;  // consensus index
-    int apn;  // active proposal number
-    int ack_count;
-    int nack_count;
-    Logger* logger_p2p;
-    PerfectLink* pl;
-
-    LatticeAgreement (int);
-    void init_next_consensus();
-    void try_decide(std::vector<std::string>);
-}
-
-LatticeAgreement::LatticeAgreement(){
-  this->ack_count = 0;
-  this->nack_count = 0;
-  this->apn = 1;
-  this->c_idx = 1;
-}
-
-void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec){
-
-  // if i get a single nack it means my proposal has changed: broadcast it
-  if (nack_cout>0){
-    apn++;
-    ack_count = 0;
-    nack_count = 0;
-    pl.do_broadcast=true;
-  }
-
-  // need ack from at least half of processes (excluding myself bc from myself I automatically get my proposed_vec)
-  if (ack_count>0.5*static_cast<float>(n_procs)){  // checks the ack_cout of the current c_idx only
-    logger_p2p.log_decide(proposed_vec, 0)  // decide proposed_set = log to output file
-    init_consensus_vars();  // move to next consensus
-  }
-}
-
-void LatticeAgreement::init_new_consensus(){
-  ack_count = 0;
-  nack_count = 0;
-  apn++;
-  c_idx++;
-
-  // take next line from config as proposed_vec
-}
