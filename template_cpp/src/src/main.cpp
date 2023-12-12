@@ -15,13 +15,12 @@
 #include <sys/socket.h> 
 #include <unistd.h> 
 #include "assert.h"
-#define _XOPEN_SOURCE_EXTENDED 1
-
 #include <map>
 #include <limits>
 #include <errno.h>
 #include <unordered_set>
 
+#define _XOPEN_SOURCE_EXTENDED 1
 #define MAX_MSG_SN 2147483646  // fixed by assignment, max_int-1 32 bit
 
 #include "utils.hpp"
@@ -37,7 +36,7 @@ std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (co
 
 std::vector<Parser::Host> hosts_vec;
 unsigned int n_procs = 0;
-std::vector<std::string> proposed_vec;
+std::map<int, std::vector<std::string>> proposed_vec;
 std::vector<std::string> accepted_vec;
 
 static void stop(int) {
@@ -122,11 +121,11 @@ int main(int argc, char **argv) {
   // init logger //
   /*-------------*/
 
+  Logger logger_p2p;
   logger_p2p.output_path = parser.outputPath();
   logger_p2p.my_pid = my_pid;
-  std::cout << "Initialized logger at: " << logger_p2p.output_path << "\n\n";
+  std::cout << "Initialized logger at: " << logger_p2p.output_path << "with ld_idx: "<< logger_p2p.ld_idx << "\n\n";
   logger_p2p.ld_buffer = new LogDecision[MAX_LOG_PERIOD];
-  logger_p2p.ld_idx = 0;
 
   /*------------------*/
   // read config file //
@@ -141,7 +140,7 @@ int main(int argc, char **argv) {
   std::string l_header, l_header_int, l_line, l_line_int;
   std::ifstream config_file;
   std::vector<int> config_file_header;
-  std::vector<std::string> proposed_vec;
+  std::map<int, std::vector<std::string>> proposed_vec;
   config_file.open(parser.configPath());
 
   // init lattice agreement
@@ -163,19 +162,29 @@ int main(int argc, char **argv) {
     NUM_PROPOSALS = config_file_header[0];
     MAX_LEN_PROPOSAL = config_file_header[1];
     NUM_DISTINCT_ELEMENTS = config_file_header[2];
+    la.NUM_PROPOSALS = NUM_PROPOSALS;
 
-    // read a proposal set (single line in config)
-    if (getline(config_file, l_line) && la.apn <= NUM_PROPOSALS){
-      std::istringstream iss(l_line);
+    // read all proposal sets (one proposal per line in config)
+    int c_counter = 1;
+    while (getline(config_file, l_line)){
+      std::istringstream iss(l_line); // get next proposal
+
+      // split set values and push into vector
       while(iss){
       std::string l_header_i;
         iss >> l_header_i;
         if (!l_header_i.empty()) {
-            proposed_vec.push_back(l_header_i);
+            proposed_vec[c_counter].push_back(l_header_i);
         }
       }
+      c_counter++;
     }
     config_file.close();
+    std::cout << "total lines read: "<< c_counter << ". proposed_vec: " << std::endl;
+    for (const auto& element : proposed_vec[la.c_idx]) {
+      std::cout << element << std::endl;
+    }
+
   }else{
     std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;
     return -1;
@@ -249,11 +258,11 @@ int main(int argc, char **argv) {
   std::cout << "Start sending messages..." << std::endl;
 
   while(true){
-
-    pl.broadcast(proposed_vec, logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
-    pl.recv(logger_p2p, socket_fd); // receive messages from other process
+    std::cout << "c_idx: "<<la.c_idx<<", apn: "<<la.apn << std::endl;
+    pl.broadcast(proposed_vec[la.c_idx], logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
+    pl.recv(proposed_vec[la.c_idx], logger_p2p, socket_fd, la.c_idx, la.apn, la.ack_count, la.nack_count); // receive messages from other process
     pl.resend(logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // resend all unacked messages once
-    la.try_decide(proposed_vec);
+    la.try_decide(proposed_vec[la.c_idx], pl.do_broadcast, logger_p2p);
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;

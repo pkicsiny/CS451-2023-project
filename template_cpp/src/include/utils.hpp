@@ -1,7 +1,16 @@
 #pragma once
 
-#include <fstream>
+#include <chrono>
 #include <iostream>
+#include <thread>
+
+#include "parser.hpp"
+#include "hello.h"
+#include <signal.h>
+
+// I load these
+
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -10,24 +19,24 @@
 #include <unistd.h>
 #include <map>
 #include <unordered_set>
-#include "parser.hpp"
+#include <algorithm>
+#include "assert.h"
+#include <numeric>
+#include <arpa/inet.h>  // hotnl etc.
 
-#define MAX_LOG_PERIOD 100
+#define MAX_LOG_PERIOD 1
 #define WINDOW_SIZE 50
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
 #define MAX_PACKET_SIZE 8  // fixed by assignment
 
 extern std::map<int, int> port_pid_map;
-
 extern std::vector<Parser::Host> hosts_vec;
-
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::vector<std::string> proposed_vec;
 
-void EncodeMetadata(std::vector<char>&, int, int, int);
+void EncodeMetadata(std::vector<char>&, int, int, int, int);
 void EncodeProposal(std::vector<std::string>, std::vector<char>&);
-void DecodeMetadata(const char*, int&, int&, int&, size_t&);
+void DecodeMetadata(const char*, int&, int&, int&, int&, size_t&);
 std::vector<std::string> DecodeProposal(const char*, size_t&);
 
 struct LogDecision {

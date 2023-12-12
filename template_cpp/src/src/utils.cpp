@@ -1,6 +1,14 @@
+#include <chrono>
+#include <iostream>
+#include <thread>
+
+#include "parser.hpp"
+#include "hello.h"
+#include <signal.h>
+
+// I load these
 
 #include <fstream>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -12,14 +20,11 @@
 #include <algorithm>
 #include "assert.h"
 #include <numeric>
-
-#include "parser.hpp"
-
 #include <arpa/inet.h>  // hotnl etc.
 
 #include "utils.hpp"
 
-#define MAX_LOG_PERIOD 100
+#define MAX_LOG_PERIOD 1
 #define WINDOW_SIZE 50
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
@@ -27,19 +32,20 @@
 
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
-
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::vector<std::string> proposed_vec;
 
-void EncodeMetadata(std::vector<char>& msg_buffer, int b_pid, int is_ack, int active_proposal_number){
-    uint32_t b_pid_ser = htonl(b_pid);  // 4 bytes encoding original sender pid in network byte order; b_pid num is max. 128
+void EncodeMetadata(std::vector<char>& msg_buffer, int is_ack, int c_idx, int apn, int b_pid){
+
     uint32_t is_ack_ser = htonl(is_ack);
-    uint32_t apn_ser = htonl(active_proposal_number);
-
-    msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&b_pid_ser), reinterpret_cast<char*>(&b_pid_ser) + sizeof(uint32_t));  // 4 bytes
+    uint32_t c_idx_ser = htonl(c_idx);
+    uint32_t apn_ser = htonl(apn);
+    uint32_t b_pid_ser = htonl(b_pid);
 
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&is_ack_ser), reinterpret_cast<char*>(&is_ack_ser) + sizeof(uint32_t));  // 4 bytes
+    msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&c_idx_ser), reinterpret_cast<char*>(&c_idx_ser) + sizeof(uint32_t));  // 4 bytes
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&apn_ser), reinterpret_cast<char*>(&apn_ser) + sizeof(uint32_t));  // 4 bytes
+    msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&b_pid_ser), reinterpret_cast<char*>(&b_pid_ser) + sizeof(uint32_t));  // 4 bytes
+
 
 }
 
@@ -62,22 +68,30 @@ void EncodeProposal(std::vector<std::string> proposal, std::vector<char>& msg_bu
     }
 }
 
-void DecodeMetadata(const char* msg_buffer, int& b_pid, int& is_ack, int& apn, size_t& offset){
-
-    // decocde b_pid
-    std::memcpy(&(b_pid), msg_buffer + offset, sizeof(uint32_t));
-    b_pid = ntohl(b_pid);
-    offset += sizeof(uint32_t);
+void DecodeMetadata(const char* msg_buffer, int& is_ack, int& c_idx, int& apn, int& b_pid, size_t& offset){
 
     // decocde is_ack
-    std::memcpy(&(is_ack), msg_buffer + offset, sizeof(uint32_t));
-    is_ack = ntohl(is_ack);
+    uint32_t is_ack_ser;
+    std::memcpy(&(is_ack_ser), msg_buffer + offset, sizeof(uint32_t));
+    is_ack = ntohl(is_ack_ser);
+    offset += sizeof(uint32_t);
+
+    // decocde c_idx
+    uint32_t c_idx_ser;
+    std::memcpy(&(c_idx_ser), msg_buffer + offset, sizeof(uint32_t));
+    c_idx = ntohl(c_idx_ser);
     offset += sizeof(uint32_t);
 
     // decocde apn
     uint32_t apn_ser;
     std::memcpy(&apn_ser, msg_buffer + offset, sizeof(uint32_t));
     apn = ntohl(apn_ser);
+    offset += sizeof(uint32_t);
+
+    // decocde b_pid
+    uint32_t b_pid_ser;
+    std::memcpy(&(b_pid_ser), msg_buffer + offset, sizeof(uint32_t));
+    b_pid = ntohl(b_pid_ser);
     offset += sizeof(uint32_t);
 
 }
@@ -93,6 +107,8 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
     size_t num_elements = ntohl(num_elements_ser);
     offset += sizeof(uint32_t);
 
+    std::cout << "num_elements in recved proposal: "<< num_elements << std::endl;
+
     for (size_t n=0; n<num_elements; n++){
 
       // proposal_i_size
@@ -100,11 +116,14 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
       std::memcpy(&(proposal_i_ser_size), msg_buffer + offset, sizeof(uint32_t));
       size_t proposal_i_size = ntohl(proposal_i_ser_size);
       offset += sizeof(uint32_t);
+      std::cout << "size of next int: " << proposal_i_size << std::endl;
 
       // decode proposal_i
       std::string proposal_i;
       proposal_i.assign(msg_buffer + offset, proposal_i_size);
       offset += proposal_i_size;
+      decoded_proposal.push_back(proposal_i);
+      std::cout << "next proposal int: "<<proposal_i << std::endl;
     }
 
     return decoded_proposal;
@@ -112,6 +131,7 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
 
 
 void Logger::log_ld_buffer(int call_mode){
+  std::cout << "log_ld_buffer" << std::endl;
   std::fstream output_file;
   output_file.open(output_path, std::ios_base::in | std::ios_base::app);
   bool do_log;
@@ -135,11 +155,13 @@ void Logger::log_ld_buffer(int call_mode){
 }
 
 Logger::Logger(){
+  ld_idx = 0;
 }
 
 Logger::Logger(const char* op, int pid){
   output_path = op;
   my_pid = pid;
+  ld_idx = 0;
 }
 
 
@@ -174,8 +196,11 @@ void Logger::log_decide(std::vector<std::string> proposed_vec, int call_mode){
   ld.line = std::accumulate(std::begin(proposed_vec), std::end(proposed_vec), std::string(),
         [](const std::string& a, const std::string& b) -> std::string { return a + (a.length() > 0 ? " " : "") + b;}
     ) + "\n";
+  std::cout << "ld_idx: "<< ld_idx << ", logging the line: " << ld.line << std::endl;
   ld_buffer[ld_idx] = ld;
+  std::cout <<"blah" << std::endl;
   ld_idx++;
+
   if(ld_idx == MAX_LOG_PERIOD){log_ld_buffer(call_mode);} // 100 msgs from different pids, but pid ordered
 }
 
