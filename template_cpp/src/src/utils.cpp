@@ -107,7 +107,7 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
     size_t num_elements = ntohl(num_elements_ser);
     offset += sizeof(uint32_t);
 
-    std::cout << "num_elements in recved proposal: "<< num_elements << std::endl;
+   // std::cout << "num_elements in recved proposal: "<< num_elements << std::endl;
 
     for (size_t n=0; n<num_elements; n++){
 
@@ -116,14 +116,14 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
       std::memcpy(&(proposal_i_ser_size), msg_buffer + offset, sizeof(uint32_t));
       size_t proposal_i_size = ntohl(proposal_i_ser_size);
       offset += sizeof(uint32_t);
-      std::cout << "size of next int: " << proposal_i_size << std::endl;
+     // std::cout << "size of next int: " << proposal_i_size << std::endl;
 
       // decode proposal_i
       std::string proposal_i;
       proposal_i.assign(msg_buffer + offset, proposal_i_size);
       offset += proposal_i_size;
       decoded_proposal.push_back(proposal_i);
-      std::cout << "next proposal int: "<<proposal_i << std::endl;
+      //std::cout << "next proposal int: "<<proposal_i << std::endl;
     }
 
     return decoded_proposal;

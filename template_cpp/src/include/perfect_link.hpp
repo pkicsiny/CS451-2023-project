@@ -31,7 +31,7 @@
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::vector<std::string> accepted_vec;
+extern std::map<int, std::vector<std::string>> accepted_vec;
 
 class PerfectLink{
   public:

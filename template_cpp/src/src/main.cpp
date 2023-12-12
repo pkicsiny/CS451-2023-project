@@ -37,7 +37,7 @@ std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (co
 std::vector<Parser::Host> hosts_vec;
 unsigned int n_procs = 0;
 std::map<int, std::vector<std::string>> proposed_vec;
-std::vector<std::string> accepted_vec;
+std::map<int, std::vector<std::string>> accepted_vec;
 
 static void stop(int) {
   // reset signal handlers to default

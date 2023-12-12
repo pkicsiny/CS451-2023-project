@@ -31,7 +31,7 @@
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::vector<std::string> accepted_vec;
+extern std::map<int, std::vector<std::string>> accepted_vec;
 
 PerfectLink::PerfectLink(int my_pid, int n_procs, std::vector<Parser::Host> hosts_vec){
   this->my_pid = my_pid;
@@ -56,7 +56,7 @@ void PerfectLink::broadcast(std::vector<std::string> proposed_vec, Logger& logge
       std::cout << "=========================Send proposal to pid (" << to_pid <<")=========================" << std::endl;
 
       if (my_pid == to_pid){
-        accepted_vec = proposed_vec;
+        accepted_vec[c_idx] = proposed_vec;
         std::cout << "proposed_vec: " << std::endl;
         for (const auto& element : proposed_vec) {
           std::cout << element << std::endl;
@@ -179,16 +179,17 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
 
           // for comparison first sort the vectors
           std::sort(decoded_proposed_vec.begin(), decoded_proposed_vec.end());
-          std::sort(accepted_vec.begin(), accepted_vec.end());
+          std::sort(accepted_vec[c_idx_recv].begin(), accepted_vec[c_idx_recv].end());
 
           std::cout << "Received proposal: ";
           for (auto& p_i: decoded_proposed_vec){std::cout << p_i << ", ";}
           std::cout << std::endl;
           std::cout << "My current accepted_vec: ";
-          for (auto& p_i: accepted_vec){std::cout << p_i << ", ";}
+          for (auto& p_i: accepted_vec[c_idx_recv]){std::cout << p_i << ", ";}
           std::cout << std::endl;
+
           // compare partner's proposal to my proposal
-          if (std::includes(decoded_proposed_vec.begin(), decoded_proposed_vec.end(), accepted_vec.begin(), accepted_vec.end())) {
+          if (std::includes(decoded_proposed_vec.begin(), decoded_proposed_vec.end(), accepted_vec[c_idx_recv].begin(), accepted_vec[c_idx_recv].end())) {
           
             // send: ACK, proposal_number
             std::vector<char> ack_packet;
@@ -200,10 +201,10 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
           }else{
             // update accepted_vec with new values
             std::set<std::string> unique_set;
-            unique_set.insert(accepted_vec.begin(), accepted_vec.end());
+            unique_set.insert(accepted_vec[c_idx_recv].begin(), accepted_vec[c_idx_recv].end());
             unique_set.insert(decoded_proposed_vec.begin(), decoded_proposed_vec.end());
             std::vector<std::string> mergedVector(unique_set.begin(), unique_set.end());
-            accepted_vec.assign(unique_set.begin(), unique_set.end());
+            accepted_vec[c_idx_recv].assign(unique_set.begin(), unique_set.end());
 
             //accepted_vec.insert(accepted_vec.end(), decoded_proposed_vec.begin(), decoded_proposed_vec.end());
 
@@ -211,7 +212,7 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
             std::vector<char> nack_packet;
             int is_ack = 2;
             EncodeMetadata(nack_packet, is_ack, c_idx_recv, apn_recv, b_pid_recv);
-            EncodeProposal(accepted_vec, nack_packet);
+            EncodeProposal(accepted_vec[c_idx_recv], nack_packet);
             send_ack(nack_packet, from_addr, socket_fd);
           }
         }else{

@@ -79,8 +79,10 @@ void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& d
   // 3 procs: i need 1 ack (+me), 4 procs: i need 2 acks (+me)
   if (num_acks>=floor(0.5*static_cast<float>(n_procs))){  // checks the ack_cout of the current c_idx only
     std::cout << "got enough acks, moving to new consensus and logging decision" << std::endl;
-    logger_p2p.log_decide(proposed_vec, 0);  // decide proposed_set = log to output file
     init_new_consensus(do_broadcast);  // move to next consensus
+
+    // TODO: this doesnt get logged at last consensus, also check sigterm logger
+    if(do_broadcast){logger_p2p.log_decide(proposed_vec, 0);}  // decide proposed_set = log to output file
   }
 }
 
