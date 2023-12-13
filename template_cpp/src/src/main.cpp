@@ -38,6 +38,7 @@ std::vector<Parser::Host> hosts_vec;
 unsigned int n_procs = 0;
 std::map<int, std::vector<std::string>> proposed_vec;
 std::map<int, std::vector<std::string>> accepted_vec;
+std::map<int, std::vector<std::string>> delivered_map;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -45,7 +46,7 @@ static void stop(int) {
   signal(SIGINT, SIG_DFL);
 
   std::cout << "Immediately stopping network packet processing.\n";
-  std::cout << "Writing output.\n";
+  std::cout << "Writing output of pid " << logger_p2p.my_pid << " into: " << logger_p2p.output_path << std::endl;
   logger_p2p.log_ld_buffer(1);
 
 /*
@@ -121,10 +122,9 @@ int main(int argc, char **argv) {
   // init logger //
   /*-------------*/
 
-  Logger logger_p2p;
   logger_p2p.output_path = parser.outputPath();
   logger_p2p.my_pid = my_pid;
-  std::cout << "Initialized logger at: " << logger_p2p.output_path << "with ld_idx: "<< logger_p2p.ld_idx << "\n\n";
+  std::cout << "Initialized logger at: " << logger_p2p.output_path << " with ld_idx: "<< logger_p2p.ld_idx << "\n\n";
   logger_p2p.ld_buffer = new LogDecision[MAX_LOG_PERIOD];
 
   /*------------------*/
@@ -162,10 +162,11 @@ int main(int argc, char **argv) {
     NUM_PROPOSALS = config_file_header[0];
     MAX_LEN_PROPOSAL = config_file_header[1];
     NUM_DISTINCT_ELEMENTS = config_file_header[2];
+
     la.NUM_PROPOSALS = NUM_PROPOSALS;
 
     // read all proposal sets (one proposal per line in config)
-    int c_counter = 1;
+    int c_counter = 0;
     while (getline(config_file, l_line)){
       std::istringstream iss(l_line); // get next proposal
 
@@ -174,16 +175,17 @@ int main(int argc, char **argv) {
       std::string l_header_i;
         iss >> l_header_i;
         if (!l_header_i.empty()) {
-            proposed_vec[c_counter].push_back(l_header_i);
+            proposed_vec[c_counter+1].push_back(l_header_i);
         }
       }
       c_counter++;
     }
     config_file.close();
-    std::cout << "total lines read: "<< c_counter << ". proposed_vec: " << std::endl;
+    std::cout << "Total lines read: "<< c_counter << ". proposed_vec: ";
     for (const auto& element : proposed_vec[la.c_idx]) {
-      std::cout << element << std::endl;
+      std::cout << element << ", ";
     }
+    std::cout << std::endl;
 
   }else{
     std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;
@@ -246,7 +248,6 @@ int main(int argc, char **argv) {
   my_addr.sin_family = AF_INET; 
   my_addr.sin_addr.s_addr = INADDR_ANY; //inet_addr(my_ip); //INADDR_ANY;  
   my_addr.sin_port = htons(my_port);  // port of my process
-  std::cout << "Client port: " << my_port << " " << my_addr.sin_port << " size: " << sizeof(my_addr) << std::endl;
   if (int bind_return = bind(socket_fd, reinterpret_cast<struct sockaddr *>(&my_addr), sizeof(my_addr)) < 0){
     std::cout << "[ERROR] bind(): " << strerror(errno) << std::endl;
     return -1;     
@@ -258,7 +259,6 @@ int main(int argc, char **argv) {
   std::cout << "Start sending messages..." << std::endl;
 
   while(true){
-    std::cout << "c_idx: "<<la.c_idx<<", apn: "<<la.apn << std::endl;
     pl.broadcast(proposed_vec[la.c_idx], logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
     pl.recv(proposed_vec[la.c_idx], logger_p2p, socket_fd, la.c_idx, la.apn, la.ack_count, la.nack_count); // receive messages from other process
     pl.resend(logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // resend all unacked messages once

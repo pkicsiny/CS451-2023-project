@@ -32,7 +32,6 @@
 #include "utils.hpp"
 #include "perfect_link.hpp"
 
-#define MAX_LOG_PERIOD 1
 #define WINDOW_SIZE 50
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
@@ -41,13 +40,14 @@
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
 extern std::vector<int> next_vec;  // fifo
+extern std::map<int, std::vector<std::string>> delivered_map;
 
 class LatticeAgreement {
   public:
     int c_idx;  // consensus index, starts from 1
     int NUM_PROPOSALS;
-    int apn;  // active proposal number, starts from 1
-    std::map<int, bool> ack_count;
+    std::map<int, int> apn;  // active proposal number, starts from 1, keys: c_idx
+    std::map<int, bool> ack_count;  // keys: c_idx, pid
     std::map<int, bool> nack_count;
 //    PerfectLink* pl(int, int, std::vector<Parser::Host>);
 

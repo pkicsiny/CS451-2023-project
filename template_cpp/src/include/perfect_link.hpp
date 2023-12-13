@@ -45,9 +45,9 @@ class PerfectLink{
 
     std::vector<char> create_send_packet(std::vector<std::string>, int, int, Logger&, int);
 
-    void broadcast(std::vector<std::string>, Logger&, int, sockaddr_in, int, int);
+    void broadcast(std::vector<std::string>, Logger&, int, sockaddr_in, int, std::map<int, int>);
     void send(std::vector<char>, sockaddr_in, int, int, int, int);
-    void recv(std::vector<std::string>&, Logger&, int, int, int, std::map<int, bool>&, std::map<int, bool>&);
-    void resend(Logger&, int, sockaddr_in, int, int);
+    void recv(std::vector<std::string>&, Logger&, int, int, std::map<int, int>, std::map<int, bool>&, std::map<int, bool>&);
+    void resend(Logger&, int, sockaddr_in, int, std::map<int, int>);
     void send_ack(std::vector<char>, sockaddr_in, int);
 };
