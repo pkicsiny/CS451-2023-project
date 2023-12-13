@@ -105,7 +105,7 @@ void PerfectLink::send(std::vector<char> msg_packet, sockaddr_in to_addr, int to
     if (r_send_msg_packet<0){
       //std::cout << "[PerfectLink::send::ERROR] Send failed with error: " << strerror(errno) << std::endl;        
     }else{
-      //std::cout << "[PerfectLink::send::SEND_SUCCESSFUL] c_idx: " << c_idx << ", apn: " << apn << ", sent packet of " << r_send_msg_packet << " bytes" << std::endl;
+      std::cout << "[PerfectLink::send::SEND_SUCCESSFUL] c_idx: " << c_idx << ", apn: " << apn << ", sent packet of " << r_send_msg_packet << " bytes" << std::endl;
     }
   }
 }
@@ -125,13 +125,13 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
 //    std::cout << "=========================Resending unacked proposal to pid ("<< to_pid <<")=========================" << std::endl;
 
     // loop through all consensuses all apns and send corresponding proposal
+    // optimize: only resend highest apn proposed_vec from each c_idx
     for (int c_i=1; c_i<=c_idx; c_i++){
-      for (int a_i=1; a_i<=apn[c_idx]; a_i++){
-        if(!(logger_p2p.resend_map[c_i][a_i][to_pid].empty())){
-          this->send(logger_p2p.resend_map[c_i][a_i][to_pid], to_addr, to_pid, socket_fd, c_i, a_i);
+        if(!(logger_p2p.resend_map[c_i][apn[c_idx]][to_pid].empty())){
+          std::cout << "resend map c_i: " << c_i << ", apn[c_idx]: " << apn[c_idx] << ", to_pid: " << to_pid << " has size: " << logger_p2p.resend_map[c_i][apn[c_idx]][to_pid].size() << std::endl;
+          this->send(logger_p2p.resend_map[c_i][apn[c_idx]][to_pid], to_addr, to_pid, socket_fd, c_i, apn[c_idx]);
         } // end if resend unacked
       }
-    }
   }  // end for hosts
 } // end resend()
 
@@ -172,7 +172,7 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
         DecodeMetadata(recv_packet.data(), is_ack_recv, c_idx_recv, apn_recv, b_pid_recv, offset);
         
         // 0: proposal sent, 1: ACK sent back, 2: NACK sent back
-          std::cout << "Received proposal sent from pid: " << sender_pid << ". is_ack_recv: "<< is_ack_recv << ", c_idx_recv: " << c_idx_recv << ", apn_recv: " << apn_recv << ". my_c_idx: " << my_c_idx << ", my_apn[c_idx]: " << my_apn[my_c_idx] << std::endl;  
+          std::cout << "Received proposal sent from pid: " << sender_pid << ", originlly b from: " << b_pid_recv << ". is_ack_recv: "<< is_ack_recv << ", c_idx_recv: " << c_idx_recv << ", apn_recv: " << apn_recv << ". my_c_idx: " << my_c_idx << ", my_apn[c_idx]: " << my_apn[my_c_idx] << std::endl;  
         if(is_ack_recv==0){
 
           // ignore proposals from future consensus rounds until my_c_idx catches up
@@ -225,7 +225,14 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
           // ack counting is always for current consensus round 
           if ((c_idx_recv == my_c_idx) && (my_apn[c_idx_recv] == apn_recv)){
             // only 1 proposal for each [c_idx, apn, pid] key; if not in map then map remains unmodified; delete a msg = stop resend
+            std::cout << "------------- ACK/NACK ---------------" << std::endl;
+            // i only get acks/nacks from b_myself
+            std::vector<char> packet_to_erase;
+            EncodeMetadata(packet_to_erase, 0, c_idx_recv, apn_recv, b_pid_recv);
+            EncodeProposal(decoded_proposed_vec, packet_to_erase);
+            std::cout << "size before: " << logger_p2p.resend_map[c_idx_recv][apn_recv][sender_pid].size() << std::endl;
             logger_p2p.resend_map[c_idx_recv][apn_recv].erase(sender_pid);
+            std::cout << "size after: " << logger_p2p.resend_map[c_idx_recv][apn_recv][sender_pid].size() << std::endl;
 
             // i can get more than 1 ack++-es caused by the same pid
             // change counters to maps of bools

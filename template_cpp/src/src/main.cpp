@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         }
       }
     }
-    NUM_PROPOSALS = config_file_header[0];
+    NUM_PROPOSALS = 2; //config_file_header[0];
     MAX_LEN_PROPOSAL = config_file_header[1];
     NUM_DISTINCT_ELEMENTS = config_file_header[2];
 
