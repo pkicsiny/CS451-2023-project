@@ -132,7 +132,6 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
 
 
 void Logger::log_ld_buffer(int call_mode){
-  std::cout << "log_ld_buffer, opening outfile: " << output_path << std::endl;
   std::fstream output_file;
   output_file.open(output_path, std::ios_base::in | std::ios_base::app);
   bool do_log;
@@ -198,7 +197,7 @@ void Logger::log_decide(std::vector<std::string> proposed_vec, int c_idx, int ca
   ld.line = std::accumulate(std::begin(proposed_vec), std::end(proposed_vec), std::string(),
         [](const std::string& a, const std::string& b) -> std::string { return a + (a.length() > 0 ? " " : "") + b;}
     ) + "\n";
-  std::cout << "ld_idx: "<< ld_idx << ", logging the line: " << ld.line << std::endl;
+  //std::cout << "ld_idx: "<< ld_idx << ", logging the line: " << ld.line << std::endl;
 
   // deliver proposed_vec of consensus c_idx
   delivered_map[c_idx] = proposed_vec;

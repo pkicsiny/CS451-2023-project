@@ -70,7 +70,7 @@ void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& d
 
   // if i get a single nack it means my proposal has changed: broadcast it
   if (num_nacks>0){
-    std::cout << "[try_decide] Got a nack. Rebroadcasting my updated proposal, incrementing apn" << std::endl;
+    //std::cout << "[try_decide] Got a nack. Rebroadcasting my updated proposal, incrementing apn" << std::endl;
     this->apn[this->c_idx]++;
     for (uint32_t i = 1; i <= n_procs; ++i) {
         this->ack_count[i] = false;
@@ -84,7 +84,7 @@ void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& d
   // need ack from at least half of processes (excluding myself bc from myself I automatically get my proposed_vec)
   // 3 procs: i need 1 ack (+me), 4 procs: i need 2 acks (+me)
   if (num_acks>=required_acks){  // checks the ack_cout of the current c_idx only
-    std::cout << "[try_decide] Got enough acks, moving to new consensus and logging decision" << std::endl;
+    //std::cout << "[try_decide] Got enough acks, moving to new consensus and logging decision" << std::endl;
 
     // TODO: this doesnt get logged at last consensus, also check sigterm logger
 
@@ -108,6 +108,8 @@ void LatticeAgreement::init_new_consensus(bool& do_broadcast){
     this->c_idx++;
     this->apn[this->c_idx]=1;
     do_broadcast=true;
-    std::cout << "=========================Init new consensus with c_idx: "<< this->c_idx << ", apn: "<< this->apn[this->c_idx]<< "=========================" << std::endl;
-  }else{std::cout << "Finished with all decisions." << std::endl;}
+    //std::cout << "=========================Init new consensus with c_idx: "<< this->c_idx << ", apn: "<< this->apn[this->c_idx]<< "=========================" << std::endl;
+  }else{
+  //  std::cout << "Finished with all decisions." << std::endl;
+  }
 }
