@@ -52,6 +52,6 @@ class LatticeAgreement {
 //    PerfectLink* pl(int, int, std::vector<Parser::Host>);
 
     LatticeAgreement ();
-    void init_new_consensus(bool&);
+    void init_new_consensus(bool&, Logger&);
     void try_decide(std::vector<std::string>, bool&, Logger&);
 };

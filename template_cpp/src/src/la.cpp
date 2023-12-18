@@ -48,9 +48,6 @@ LatticeAgreement::LatticeAgreement(){
       this->ack_count[i] = false;
       this->nack_count[i] = false;
   }
-
-  //this->ack_count=0;
-  //this->nack_count=0;
 }
 
 void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& do_broadcast, Logger& logger_p2p){
@@ -76,8 +73,6 @@ void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& d
         this->ack_count[i] = false;
         this->nack_count[i] = false;
     }
-    //ack_count = 0;
-    //nack_count = 0;
     do_broadcast=true;
   }
 
@@ -86,20 +81,16 @@ void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& d
   if (num_acks>=required_acks){  // checks the ack_cout of the current c_idx only
     //std::cout << "[try_decide] Got enough acks, moving to new consensus and logging decision" << std::endl;
 
-    // TODO: this doesnt get logged at last consensus, also check sigterm logger
-
     // deliver only if not yet delivered
     if (delivered_map[this->c_idx].empty()){
       logger_p2p.log_decide(proposed_vec, this->c_idx, 0);
     }  // decide proposed_set = log to output file
 
-    init_new_consensus(do_broadcast);  // move to next consensus
+    init_new_consensus(do_broadcast, logger_p2p);  // move to next consensus
   }
 }
 
-void LatticeAgreement::init_new_consensus(bool& do_broadcast){
-  //this->ack_count = 0;
-  //this->nack_count = 0;
+void LatticeAgreement::init_new_consensus(bool& do_broadcast, Logger& logger_p2p){
   if (this->c_idx < this->NUM_PROPOSALS){
     for (uint32_t i = 1; i <= n_procs; ++i) {
         this->ack_count[i] = false;
@@ -110,6 +101,7 @@ void LatticeAgreement::init_new_consensus(bool& do_broadcast){
     do_broadcast=true;
     //std::cout << "=========================Init new consensus with c_idx: "<< this->c_idx << ", apn: "<< this->apn[this->c_idx]<< "=========================" << std::endl;
   }else{
-  //  std::cout << "Finished with all decisions." << std::endl;
+    logger_p2p.resend_map[this->c_idx].erase(this->apn[this->c_idx]);
+    //std::cout << "Finished with all decisions." << std::endl; 
   }
 }

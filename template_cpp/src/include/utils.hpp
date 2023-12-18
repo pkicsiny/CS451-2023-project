@@ -24,7 +24,7 @@
 #include <numeric>
 #include <arpa/inet.h>  // hotnl etc.
 
-#define MAX_LOG_PERIOD 1
+#define MAX_LOG_PERIOD 10
 #define WINDOW_SIZE 50
 #define MAX_MSG_LIST_SIZE 1024 // >0 this is there so that I can send MAX_INT wo filling up the RAM
 #define MAX_MSG_LENGTH_BYTES = 255;  // >0 256th is 0 terminator
