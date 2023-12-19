@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
 
   while(true){
     pl.broadcast(proposed_vec[la.c_idx], logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
-    pl.recv(proposed_vec[la.c_idx], logger_p2p, socket_fd, la.c_idx, la.apn, la.ack_count, la.nack_count); // receive messages from other process
+    pl.recv(proposed_vec[la.c_idx], logger_p2p, socket_fd, la.c_idx, la.apn, la.ack_count, la.nack_count);
     pl.resend(logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // resend all unacked messages once
     la.try_decide(proposed_vec[la.c_idx], pl.do_broadcast, logger_p2p);
   }  // end while send

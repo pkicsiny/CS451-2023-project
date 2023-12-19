@@ -231,7 +231,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
             logger_p2p.resend_map[c_idx_recv][apn_recv].erase(sender_pid);
 
             // i can get more than 1 ack++-es caused by the same pid
-            // change counters to maps of bools
             if (is_ack_recv==1){ack_count[sender_pid]=true;}
             else if (is_ack_recv==2){
               nack_count[sender_pid]=true;

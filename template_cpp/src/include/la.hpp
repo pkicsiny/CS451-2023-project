@@ -49,7 +49,6 @@ class LatticeAgreement {
     std::map<int, int> apn;  // active proposal number, starts from 1, keys: c_idx
     std::map<int, bool> ack_count;  // keys: c_idx, pid
     std::map<int, bool> nack_count;
-//    PerfectLink* pl(int, int, std::vector<Parser::Host>);
 
     LatticeAgreement ();
     void init_new_consensus(bool&, Logger&);

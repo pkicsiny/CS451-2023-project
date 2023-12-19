@@ -80,7 +80,6 @@ void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& 
   // need ack from at least half of processes (excluding myself bc from myself I automatically get my proposed_vec)
   // 3 procs: i need 1 ack (+me), 4 procs: i need 2 acks (+me)
   if (num_acks >= quorum){  // checks the ack_cout of the current c_idx only
-    //std::cout << "[try_decide] Got enough acks, moving to new consensus and logging decision" << std::endl;
 
     // deliver only if not yet delivered, after delivery it becomes true
     if (delivered_map.find(this->c_idx) == delivered_map.end()){
@@ -93,8 +92,7 @@ void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& 
 
 void LatticeAgreement::init_new_consensus(bool& do_broadcast, Logger& logger_p2p){
 
-  // upon initting a new round I can erase proposal_vec from the previous round
-  //std::cout << "Free up memory of c_idx: " << this->c_idx << std::endl;
+  // upon initting a new round I can erase proposal of the previous round
   logger_p2p.resend_map.erase(this->c_idx);
 
   if (this->c_idx < this->NUM_PROPOSALS){
@@ -107,7 +105,6 @@ void LatticeAgreement::init_new_consensus(bool& do_broadcast, Logger& logger_p2p
     do_broadcast=true;
     //std::cout << "=========================Init new consensus with c_idx: "<< this->c_idx << ", apn: "<< this->apn[this->c_idx]<< "=========================" << std::endl;
   }else{
-    //logger_p2p.resend_map.erase(this->c_idx);
     //std::cout << "Finished with all decisions." << std::endl; 
   }
 }
