@@ -53,20 +53,21 @@ LatticeAgreement::LatticeAgreement(){
 void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& do_broadcast, Logger& logger_p2p){
 //  std::cout << "=========================Attempt to decide=========================" << std::endl;
 
-  int required_acks = static_cast<int>(floor(0.5*static_cast<float>(n_procs)));
+  // f+1 ie = (4+1)/10 or (4+1)/9, at least half of procs
+  int quorum = static_cast<int>(floor(0.5*static_cast<float>(n_procs)));
 
   int num_acks = static_cast<int>(std::count_if(ack_count.begin(), ack_count.end(),
         [](const auto& key_value) {return key_value.second == true;}));
   int num_nacks = static_cast<int>(std::count_if(nack_count.begin(), nack_count.end(),
         [](const auto& key_value) {return key_value.second == true;}));
-  //std::cout << "[try_decide] Waiting for " << required_acks << " acks. num_acks : " << num_acks << ", num_nacks: " << num_nacks << ", proposed_vec: ";
+  //std::cout << "[try_decide] Waiting for " << quorum << " acks. num_acks : " << num_acks << ", num_nacks: " << num_nacks << ", proposed_vec: ";
 //  for (const auto& element : proposed_vec) {
 //    std::cout << element << ", ";
 //  }
 //  std::cout << std::endl;
 
-  // if i get a single nack it means my proposal has changed: broadcast it
-  if (num_nacks>0){
+  // rebroadcast only if my proposal is there in the accepted_vec of a quorum (at least half)
+  if ((num_nacks>0) && (num_nacks + num_acks >= quorum)){
     //std::cout << "[try_decide] Got a nack. Rebroadcasting my updated proposal, incrementing apn" << std::endl;
     this->apn[this->c_idx]++;
     for (uint32_t i = 1; i <= n_procs; ++i) {
@@ -78,7 +79,7 @@ void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& 
 
   // need ack from at least half of processes (excluding myself bc from myself I automatically get my proposed_vec)
   // 3 procs: i need 1 ack (+me), 4 procs: i need 2 acks (+me)
-  if (num_acks>=required_acks){  // checks the ack_cout of the current c_idx only
+  if (num_acks >= quorum){  // checks the ack_cout of the current c_idx only
     //std::cout << "[try_decide] Got enough acks, moving to new consensus and logging decision" << std::endl;
 
     // deliver only if not yet delivered, after delivery it becomes true
