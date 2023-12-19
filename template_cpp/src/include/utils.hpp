@@ -33,7 +33,7 @@
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::map<int, std::vector<std::string>> delivered_map;
+extern std::map<int, bool> delivered_map;
 
 void EncodeMetadata(std::vector<char>&, int, int, int, int);
 void EncodeProposal(std::vector<std::string>, std::vector<char>&);
@@ -61,7 +61,7 @@ class Logger {
     void print_pending();
     void log_ld_buffer(int);
     bool check_dupes(bool&, std::fstream&, std::stringstream&, int, int&, int);
-    void log_decide(std::vector<std::string>, int, int);
+    void log_decide(std::vector<std::string>&, int, int);
     void init_new_consensus();
 };
 

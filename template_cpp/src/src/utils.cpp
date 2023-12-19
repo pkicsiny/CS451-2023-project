@@ -33,7 +33,7 @@
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::map<int, std::vector<std::string>> delivered_map;
+extern std::map<int, bool> delivered_map;
 
 void EncodeMetadata(std::vector<char>& msg_buffer, int is_ack, int c_idx, int apn, int b_pid){
 
@@ -143,7 +143,7 @@ void Logger::log_ld_buffer(int call_mode){
       do_log = true; // for each msg try to log by default
       std::stringstream ss; // stringstream containing a full log line
       ss << ld_buffer[i].line;
-//        if ((i==10) && (call_mode==0)){std::cout << "sleep" << std::endl; output_file.close(); sleep(100000);}
+      //if ((i==5) && (call_mode==0)){std::cout << "sleep" << std::endl; output_file.close(); sleep(100000);}
       do_log = check_dupes(do_log, output_file, ss, call_mode, last_ld_idx, i); // check if msg already in logfile (relevant after sigterm/int)
       if (do_log){output_file << ss.str();}
     }
@@ -190,7 +190,7 @@ bool Logger::check_dupes(bool& do_log, std::fstream& output_file, std::stringstr
 }
 
 
-void Logger::log_decide(std::vector<std::string> proposed_vec, int c_idx, int call_mode){
+void Logger::log_decide(std::vector<std::string>& proposed_vec, int c_idx, int call_mode){
 
   // concat proposal integers into one line
   LogDecision ld;
@@ -198,12 +198,13 @@ void Logger::log_decide(std::vector<std::string> proposed_vec, int c_idx, int ca
         [](const std::string& a, const std::string& b) -> std::string { return a + (a.length() > 0 ? " " : "") + b;}
     ) + "\n";
   //std::cout << "ld_idx: "<< ld_idx << ", logging the line: " << ld.line << std::endl;
-
-  // deliver proposed_vec of consensus c_idx
-  delivered_map[c_idx] = proposed_vec;
   ld_buffer[ld_idx] = ld;
   ld_idx++;
 
-  if(ld_idx == MAX_LOG_PERIOD){log_ld_buffer(call_mode);} // 100 msgs from different pids, but pid ordered
+  // free up memory proposed_vec[c_idx] of consensus c_idx
+  delivered_map[c_idx] = true;
+  proposed_vec.clear();
+
+  if(ld_idx == MAX_LOG_PERIOD){log_ld_buffer(call_mode);}
 }
 

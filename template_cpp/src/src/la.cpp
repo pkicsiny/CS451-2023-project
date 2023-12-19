@@ -39,7 +39,7 @@
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
 extern unsigned int n_procs;  // urb, num_processes / 2
-extern std::map<int, std::vector<std::string>> delivered_map;
+extern std::map<int, bool> delivered_map;
 
 LatticeAgreement::LatticeAgreement(){
   this->apn[1] = 1;
@@ -50,7 +50,7 @@ LatticeAgreement::LatticeAgreement(){
   }
 }
 
-void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& do_broadcast, Logger& logger_p2p){
+void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& do_broadcast, Logger& logger_p2p){
 //  std::cout << "=========================Attempt to decide=========================" << std::endl;
 
   int required_acks = static_cast<int>(floor(0.5*static_cast<float>(n_procs)));
@@ -81,8 +81,8 @@ void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& d
   if (num_acks>=required_acks){  // checks the ack_cout of the current c_idx only
     //std::cout << "[try_decide] Got enough acks, moving to new consensus and logging decision" << std::endl;
 
-    // deliver only if not yet delivered
-    if (delivered_map[this->c_idx].empty()){
+    // deliver only if not yet delivered, after delivery it becomes true
+    if (delivered_map.find(this->c_idx) == delivered_map.end()){
       logger_p2p.log_decide(proposed_vec, this->c_idx, 0);
     }  // decide proposed_set = log to output file
 
@@ -91,6 +91,11 @@ void LatticeAgreement::try_decide(std::vector<std::string> proposed_vec, bool& d
 }
 
 void LatticeAgreement::init_new_consensus(bool& do_broadcast, Logger& logger_p2p){
+
+  // upon initting a new round I can erase proposal_vec from the previous round
+  //std::cout << "Free up memory of c_idx: " << this->c_idx << std::endl;
+  logger_p2p.resend_map.erase(this->c_idx);
+
   if (this->c_idx < this->NUM_PROPOSALS){
     for (uint32_t i = 1; i <= n_procs; ++i) {
         this->ack_count[i] = false;
@@ -101,7 +106,7 @@ void LatticeAgreement::init_new_consensus(bool& do_broadcast, Logger& logger_p2p
     do_broadcast=true;
     //std::cout << "=========================Init new consensus with c_idx: "<< this->c_idx << ", apn: "<< this->apn[this->c_idx]<< "=========================" << std::endl;
   }else{
-    logger_p2p.resend_map[this->c_idx].erase(this->apn[this->c_idx]);
+    //logger_p2p.resend_map.erase(this->c_idx);
     //std::cout << "Finished with all decisions." << std::endl; 
   }
 }

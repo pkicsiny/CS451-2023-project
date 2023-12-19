@@ -38,7 +38,7 @@ std::vector<Parser::Host> hosts_vec;
 unsigned int n_procs = 0;
 std::map<int, std::vector<std::string>> proposed_vec;
 std::map<int, std::vector<std::string>> accepted_vec;
-std::map<int, std::vector<std::string>> delivered_map;
+std::map<int, bool> delivered_map;
 
 static void stop(int) {
   // reset signal handlers to default
@@ -181,11 +181,7 @@ int main(int argc, char **argv) {
       c_counter++;
     }
     config_file.close();
-    std::cout << "Total lines read: "<< c_counter << ". proposed_vec: ";
-    for (const auto& element : proposed_vec[la.c_idx]) {
-      std::cout << element << ", ";
-    }
-    std::cout << std::endl;
+    std::cout << "Total lines read: "<< c_counter << std::endl;
 
   }else{
     std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;

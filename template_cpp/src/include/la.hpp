@@ -40,7 +40,7 @@
 extern std::map<int, int> port_pid_map;
 extern std::vector<Parser::Host> hosts_vec;
 extern std::vector<int> next_vec;  // fifo
-extern std::map<int, std::vector<std::string>> delivered_map;
+extern std::map<int, bool> delivered_map;
 
 class LatticeAgreement {
   public:
@@ -53,5 +53,5 @@ class LatticeAgreement {
 
     LatticeAgreement ();
     void init_new_consensus(bool&, Logger&);
-    void try_decide(std::vector<std::string>, bool&, Logger&);
+    void try_decide(std::vector<std::string>&, bool&, Logger&);
 };
