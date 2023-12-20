@@ -1,14 +1,22 @@
-import numpy as np
+#!/usr/bin/env python3
+
 import os
-import sys
 import re
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('output')
+parser.add_argument('d')
+args = parser.parse_args()
 
 ##########
 # config #
 ##########
 
-d = 20
-output_path = "subs_milestone_3/sub_007_result/logs/run"
+d = int(args.d) # number of consensus rounds
+output_path = args.output
+print(f"Checking outputs at: {output_path} with {d} decisions")
+
 out_files = os.listdir(output_path)
 out_files_filtered = []
 config_files_filtered = []
@@ -25,6 +33,7 @@ for of in out_files:
 decisions_dict = {}
 for of_path in out_files_filtered:
     of = open(of_path, "r")
+    #print(out_files_filtered, of_path)
     pid = int(re.findall("proc[0-9]+\.", of_path)[0][4:-1])
     decisions_list = of.read().split("\n")[:-1]
     decisions_dict[pid] = decisions_list
@@ -37,6 +46,7 @@ for of_path in out_files_filtered:
 config_proposals_dict = {}
 for cf_path in config_files_filtered:
     cf = open(cf_path, "r")
+    #print(config_files_filtered, cf_path)
     pid = int(re.findall("proc[0-9]+\.", cf_path)[0][4:-1])
     config_proposals_list = cf.read().split("\n")[1:-1]
     config_proposals_dict[pid] = config_proposals_list
@@ -63,6 +73,7 @@ for i in range(d):
     longest_pid = 0
     
     for pid_i in decisions_dict.keys():
+        #print(len(decisions_dict[pid_i]), i)
         dec_d_pid_i = decisions_dict[pid_i][i].split(" ")
         dth_dec_dict[pid_i] = dec_d_pid_i    
     
