@@ -77,7 +77,13 @@ for i in range(d):
         dec_d_pid_i = decisions_dict[pid_i][i].split(" ")
         dth_dec_dict[pid_i] = dec_d_pid_i    
     
-    # get all proposet values in this round
+        # select the longest decision i.e. a superset of all other processes
+        if len(dec_d_pid_i) > len(longest_dec_d):
+            longest_dec_d = dec_d_pid_i
+            longest_pid = pid_i 
+    #print(f"Decision round {i+1} longest decided set for pid {longest_pid}: {longest_dec_d}") 
+
+    # get all proposed values in this round
     dth_dec_union_of_proposals = set(sum(dth_prop_dict.values(), []))
     #print(dth_dec_union_of_proposals)
     
@@ -89,9 +95,9 @@ for i in range(d):
     for pid_i in dth_dec_dict.keys(): # only for those who have an output
         dth_dec_pid_i  = dth_dec_dict [pid_i] # the decided set
         dth_prop_pid_i = dth_prop_dict[pid_i] # the proposed set
-        #print(f"[VALIDITY1] Process pid {pid_i} proposed: {dth_prop_pid_i}, decided: {dth_dec_pid_i} in round {i}")
+        #print(f"[VALIDITY1] Process pid {pid_i} proposed: {dth_prop_pid_i}, decided: {dth_dec_pid_i} in round {i+1}")
 
-        assert set(dth_prop_pid_i).issubset(dth_dec_pid_i), f"Proposed set {dth_prop_pid_i} is not a subset of decided set {dth_dec_pid_i} for process pid {pid_i} in round {i}"
+        assert set(dth_prop_pid_i).issubset(dth_dec_pid_i), f"[VALIDITY1] Proposed set {dth_prop_pid_i} is not a subset of decided set {dth_dec_pid_i} for process pid {pid_i} in round {i+1}"
 
     ###################
     # validity test 2 #
@@ -101,31 +107,26 @@ for i in range(d):
     for pid_i in dth_dec_dict.keys(): # only for those who have an output
         dth_dec_pid_i  = dth_dec_dict [pid_i] # the decided set
         
-        assert set(dth_dec_pid_i).issubset(dth_dec_union_of_proposals), f"Proposed set {dth_prop_pid_i} is not a subset of all proposed values {dth_dec_union_of_proposals} for process pid {pid_i} in round {i}"
+        assert set(dth_dec_pid_i).issubset(dth_dec_union_of_proposals), f"[VALIDITY2] Proposed set {dth_prop_pid_i} is not a subset of all proposed values {dth_dec_union_of_proposals} for process pid {pid_i} in round {i+1}"
     
     
     ######################
     # consistency test 1 #
     ######################
-    
-    # select the longest decision i.e. a superset of all other processes
-    if len(dec_d_pid_i) > len(longest_dec_d):
-        longest_dec_d = dec_d_pid_i
-        longest_pid = pid_i  
-            
+                
     #compare all decision sets against the longest one in the current round
     for pid_i in dth_dec_dict.keys():
         #print(dth_dec_dict[pid_i])
 
         dth_dec_pid_i= dth_dec_dict[pid_i]
         
-        #print(f"[CONSISTENCY1] Comparing decision {i} between process {pid_i} and {longest_pid} (with longest decided set in round {i})")
+        #print(f"[CONSISTENCY1] Comparing decision {i+1} between process {pid_i} and {longest_pid} (with longest decided set in round {i+1})")
 
         # loop over int values of decision
         for dec_i in dth_dec_pid_i:
             
             # check if all ints are contained in the longest set i.e. a susbset
-            assert dec_i in longest_dec_d, f"[ERROR] {dec_i} of pid {pid_i} is not contained in {longest_dec_d} of pid {longest_pid}"
+            assert dec_i in longest_dec_d, f"[CONSISTENCY1] {dec_i} of pid {pid_i} is not contained in {longest_dec_d} of pid {longest_pid}"
             
     ######################
     # consistency test 2 #
@@ -137,6 +138,7 @@ for i in range(d):
         for pid_j in dth_dec_dict.keys():
             dth_dec_pid_j = dth_dec_dict[pid_j]
             
-            #print(f"[CONSISTENCY2] Comparing decision {i} between process {pid_i} and {pid_j}")
-            assert set(dth_dec_pid_i).issubset(dth_dec_pid_j) or set(dth_dec_pid_j).issubset(dth_dec_pid_i), f"[ERROR]"
-            
+            #print(f"[CONSISTENCY2] Comparing decision {i+1} between process {pid_i} and {pid_j}")
+            assert set(dth_dec_pid_i).issubset(dth_dec_pid_j) or set(dth_dec_pid_j).issubset(dth_dec_pid_i), f"[CONSISTENCY2] decisions of process {pid_i} and {pid_j} are not comparable: {dth_dec_pid_i} {dth_dec_pid_j}"
+
+print("[SUCCESS] Execution correct.")    
