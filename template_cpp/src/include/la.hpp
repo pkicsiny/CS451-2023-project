@@ -47,10 +47,10 @@ class LatticeAgreement {
     int c_idx;  // consensus index, starts from 1
     int NUM_PROPOSALS;
     std::map<int, int> apn;  // active proposal number, starts from 1, keys: c_idx
-    std::map<int, bool> ack_count;  // keys: c_idx, pid
+    std::map<int, bool> ack_count;  // key: pid, only for current c_idx
     std::map<int, bool> nack_count;
 
     LatticeAgreement ();
-    void init_new_consensus(bool&, Logger&);
-    void try_decide(std::vector<std::string>&, bool&, Logger&);
+    void init_new_consensus(bool&, bool&, Logger&);
+    void try_decide(std::vector<std::string>&, bool&, bool&, Logger&);
 };

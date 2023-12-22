@@ -65,3 +65,4 @@ class Logger {
     void init_new_consensus();
 };
 
+void read_single_line(const char*, int, std::map<int, std::vector<std::string>>&);

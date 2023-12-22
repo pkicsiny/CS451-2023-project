@@ -164,7 +164,17 @@ int main(int argc, char **argv) {
     NUM_DISTINCT_ELEMENTS = config_file_header[2];
 
     la.NUM_PROPOSALS = NUM_PROPOSALS;
+  }else{
+    std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;
+    return -1;
+  }
 
+  config_file.close();
+
+  // read first proposal
+  read_single_line(parser.configPath(), 1, proposed_vec);
+
+/*
     // read all proposal sets (one proposal per line in config)
     int c_counter = 0;
     while (getline(config_file, l_line)){
@@ -187,7 +197,7 @@ int main(int argc, char **argv) {
     std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;
     return -1;
   }
-  
+*/  
   if (NUM_PROPOSALS == -1 || MAX_LEN_PROPOSAL == -1 || NUM_DISTINCT_ELEMENTS == -1){
     std::cout << "[ERROR] Reading config failed. NUM_PROPOSALS: " << NUM_PROPOSALS << ", MAX_LEN_PROPOSAL: "<< MAX_LEN_PROPOSAL << ", NUM_DISTINCT_ELEMENTS: " << NUM_DISTINCT_ELEMENTS << std::endl;
     return -1;
@@ -195,6 +205,7 @@ int main(int argc, char **argv) {
     std::cout << "Config successfully read. NUM_PROPOSALS: " << NUM_PROPOSALS << ", MAX_LEN_PROPOSAL: "<< MAX_LEN_PROPOSAL << ", NUM_DISTINCT_ELEMENTS: " << NUM_DISTINCT_ELEMENTS << std::endl;
 
   }
+
 
   /*---------------------*/
   // create pending list //
@@ -253,12 +264,21 @@ int main(int argc, char **argv) {
   setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);
 
   std::cout << "Start sending messages..." << std::endl;
+  bool read_new_line = false;
 
   while(true){
     pl.broadcast(proposed_vec[la.c_idx], logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // send some messages once
     pl.recv(proposed_vec[la.c_idx], logger_p2p, socket_fd, la.c_idx, la.apn, la.ack_count, la.nack_count);
     pl.resend(logger_p2p, socket_fd, to_addr, la.c_idx, la.apn); // resend all unacked messages once
-    la.try_decide(proposed_vec[la.c_idx], pl.do_broadcast, logger_p2p);
+    la.try_decide(proposed_vec[la.c_idx], pl.do_broadcast, read_new_line, logger_p2p);
+
+    // set to true only upon init_new_consensus
+    if (read_new_line){
+      read_single_line(parser.configPath(), la.c_idx, proposed_vec);
+      read_new_line = false;
+    }
+
+
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;

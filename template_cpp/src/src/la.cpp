@@ -50,7 +50,7 @@ LatticeAgreement::LatticeAgreement(){
   }
 }
 
-void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& do_broadcast, Logger& logger_p2p){
+void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& do_broadcast, bool& read_new_line, Logger& logger_p2p){
 //  std::cout << "=========================Attempt to decide=========================" << std::endl;
 
   // f+1 ie = (4+1)/10 or (4+1)/9, at least half of procs
@@ -60,11 +60,6 @@ void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& 
         [](const auto& key_value) {return key_value.second == true;}));
   int num_nacks = static_cast<int>(std::count_if(nack_count.begin(), nack_count.end(),
         [](const auto& key_value) {return key_value.second == true;}));
-  //std::cout << "[try_decide] Waiting for " << quorum << " acks. num_acks : " << num_acks << ", num_nacks: " << num_nacks << ", proposed_vec: ";
-//  for (const auto& element : proposed_vec) {
-//    std::cout << element << ", ";
-//  }
-//  std::cout << std::endl;
 
   // rebroadcast only if my proposal is there in the accepted_vec of a quorum (at least half)
   if ((num_nacks>0) && (num_nacks + num_acks >= quorum)){
@@ -86,14 +81,18 @@ void LatticeAgreement::try_decide(std::vector<std::string>& proposed_vec, bool& 
       logger_p2p.log_decide(proposed_vec, this->c_idx, 0);
     }  // decide proposed_set = log to output file
 
-    init_new_consensus(do_broadcast, logger_p2p);  // move to next consensus
+    init_new_consensus(do_broadcast, read_new_line, logger_p2p);  // move to next consensus
   }
 }
 
-void LatticeAgreement::init_new_consensus(bool& do_broadcast, Logger& logger_p2p){
+void LatticeAgreement::init_new_consensus(bool& do_broadcast, bool& read_new_line, Logger& logger_p2p){
 
   // upon initting a new round I can erase proposal of the previous round
-  logger_p2p.resend_map.erase(this->c_idx);
+  //std::cout << "before erase" << std::endl;
+  if (!(logger_p2p.resend_map.empty())){
+    logger_p2p.resend_map.erase(this->c_idx);
+  }
+  //std::cout << "after erase" << std::endl;
 
   if (this->c_idx < this->NUM_PROPOSALS){
     for (uint32_t i = 1; i <= n_procs; ++i) {
@@ -103,6 +102,8 @@ void LatticeAgreement::init_new_consensus(bool& do_broadcast, Logger& logger_p2p
     this->c_idx++;
     this->apn[this->c_idx]=1;
     do_broadcast=true;
+    read_new_line = true;
+
     //std::cout << "=========================Init new consensus with c_idx: "<< this->c_idx << ", apn: "<< this->apn[this->c_idx]<< "=========================" << std::endl;
   }else{
     //std::cout << "Finished with all decisions." << std::endl; 

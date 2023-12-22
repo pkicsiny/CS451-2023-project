@@ -105,7 +105,7 @@ void PerfectLink::send(std::vector<char> msg_packet, sockaddr_in to_addr, int to
     if (r_send_msg_packet<0){
       //std::cout << "[PerfectLink::send::ERROR] Send failed with error: " << strerror(errno) << std::endl;        
     }else{
-  //    std::cout << "[PerfectLink::send::SEND_SUCCESSFUL] c_idx: " << c_idx << ", apn: " << apn << ", sent packet of " << r_send_msg_packet << " bytes" << std::endl;
+//     std::cout << "[PerfectLink::send::SEND_SUCCESSFUL] c_idx: " << c_idx << ", apn: " << apn << ", sent packet of " << r_send_msg_packet << " bytes" << std::endl;
     }
   }
 }
@@ -228,9 +228,12 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
             std::vector<char> packet_to_erase;
             EncodeMetadata(packet_to_erase, 0, c_idx_recv, apn_recv, b_pid_recv);
             EncodeProposal(decoded_proposed_vec, packet_to_erase);
-            logger_p2p.resend_map[c_idx_recv][apn_recv].erase(sender_pid);
+            if (!(logger_p2p.resend_map[c_idx_recv][apn_recv].empty())){
+              logger_p2p.resend_map[c_idx_recv][apn_recv].erase(sender_pid);
+            }
 
             // i can get more than 1 ack++-es caused by the same pid
+            // change counters to maps of bools
             if (is_ack_recv==1){ack_count[sender_pid]=true;}
             else if (is_ack_recv==2){
               nack_count[sender_pid]=true;
