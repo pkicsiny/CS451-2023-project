@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <cmath>
 #include <set>
+#include <mutex>
 
 #include "utils.hpp"
 #include "perfect_link.hpp"
@@ -100,8 +101,12 @@ std::vector<char> PerfectLink::create_send_packet(std::vector<std::string> propo
 void PerfectLink::send(std::vector<char> msg_packet, sockaddr_in to_addr, int to_pid, int socket_fd, int c_idx, int apn){
   if (to_pid != this->my_pid){
     size_t packet_size = msg_packet.size();  // byte size, since sizeof(char)=1
+
+    pl_mutex.lock();
     int64_t r_send_msg_packet = sendto(socket_fd, msg_packet.data(), packet_size, 0,
       reinterpret_cast<struct sockaddr *>(&to_addr), sizeof(to_addr)); // returns number of characters sent
+    pl_mutex.unlock();
+
     if (r_send_msg_packet<0){
       //std::cout << "[PerfectLink::send::ERROR] Send failed with error: " << strerror(errno) << std::endl;        
     }else{
@@ -228,9 +233,11 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
             std::vector<char> packet_to_erase;
             EncodeMetadata(packet_to_erase, 0, c_idx_recv, apn_recv, b_pid_recv);
             EncodeProposal(decoded_proposed_vec, packet_to_erase);
+            logger_p2p.logger_mutex.lock();
             if (!(logger_p2p.resend_map[c_idx_recv][apn_recv].empty())){
               logger_p2p.resend_map[c_idx_recv][apn_recv].erase(sender_pid);
             }
+            logger_p2p.logger_mutex.unlock();
 
             // i can get more than 1 ack++-es caused by the same pid
             // change counters to maps of bools
@@ -259,8 +266,11 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
 void PerfectLink::send_ack(std::vector<char> ack_packet, sockaddr_in to_addr, int socket_fd){
   size_t ack_packet_size = ack_packet.size();  // byte size, since sizeof(char)=1
 
+  pl_mutex.lock();
   int64_t r_send_ack_packet = sendto(socket_fd, ack_packet.data(), ack_packet_size, 0,
       reinterpret_cast<struct sockaddr *>(&to_addr), sizeof(to_addr));  // returns number of characters sent
+  pl_mutex.unlock();
+
   if (r_send_ack_packet < 0) {
       //std::cout << "[recv::ERROR] sending ack message failed with error: " << strerror(errno) << std::endl;
   }else{

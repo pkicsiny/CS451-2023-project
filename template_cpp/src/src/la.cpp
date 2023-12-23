@@ -89,9 +89,11 @@ void LatticeAgreement::init_new_consensus(bool& do_broadcast, bool& read_new_lin
 
   // upon initting a new round I can erase proposal of the previous round
   //std::cout << "before erase" << std::endl;
+  logger_p2p.logger_mutex.lock();
   if (!(logger_p2p.resend_map.empty())){
     logger_p2p.resend_map.erase(this->c_idx);
   }
+  logger_p2p.logger_mutex.unlock();
   //std::cout << "after erase" << std::endl;
 
   if (this->c_idx < this->NUM_PROPOSALS){

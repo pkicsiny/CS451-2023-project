@@ -23,6 +23,7 @@
 #include <unordered_set>
 #include <cmath>
 #include <set>
+#include <mutex>
 
 #include "utils.hpp"
 
@@ -42,6 +43,7 @@ class PerfectLink{
     size_t prev_size;
     std::vector<Parser::Host> hosts_vec;
     bool do_broadcast;
+    std::mutex pl_mutex;
 
     std::vector<char> create_send_packet(std::vector<std::string>, int, int, Logger&, int);
 

@@ -23,6 +23,7 @@
 #include "assert.h"
 #include <numeric>
 #include <arpa/inet.h>  // hotnl etc.
+#include <mutex>
 
 #define MAX_LOG_PERIOD 10
 #define WINDOW_SIZE 50
@@ -50,6 +51,7 @@ class Logger {
     std::ostringstream ss;
     int my_pid;
     std::map<int, std::map<int, std::map<int, std::vector<char>>>> resend_map; 
+    std::mutex logger_mutex;
 
     Logger ();
     Logger (const char*, int);
