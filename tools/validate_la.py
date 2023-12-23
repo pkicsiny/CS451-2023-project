@@ -107,7 +107,7 @@ for i in range(d):
     for pid_i in dth_dec_dict.keys(): # only for those who have an output
         dth_dec_pid_i  = dth_dec_dict [pid_i] # the decided set
         
-        assert set(dth_dec_pid_i).issubset(dth_dec_union_of_proposals), f"[VALIDITY2] Proposed set {dth_prop_pid_i} is not a subset of all proposed values {dth_dec_union_of_proposals} for process pid {pid_i} in round {i+1}"
+        assert set(dth_dec_pid_i).issubset(dth_dec_union_of_proposals), f"[VALIDITY2] Proposed set {dth_dec_pid_i} is not a subset of all proposed values {dth_dec_union_of_proposals} for process pid {pid_i} in round {i+1}"
     
     
     ######################
