@@ -35,7 +35,9 @@ for of_path in out_files_filtered:
     of = open(of_path, "r")
     #print(out_files_filtered, of_path)
     pid = int(re.findall("proc[0-9]+\.", of_path)[0][4:-1])
-    decisions_list = of.read().split("\n")[:-1]
+    decisions = of.read()
+    #print(decisions)
+    decisions_list = decisions.split("\n")[:-1]
     decisions_dict[pid] = decisions_list
     #print(len(decisions_list))
     
@@ -58,6 +60,7 @@ for cf_path in config_files_filtered:
 
 # loop over decidsions
 for i in range(d):
+    print(f"Checking round [{i+1}/{d}]")
     
     # select d-th proposal from config of each process
     dth_prop_dict = {}
@@ -74,15 +77,20 @@ for i in range(d):
     
     for pid_i in decisions_dict.keys():
         #print(len(decisions_dict[pid_i]), i)
-        dec_d_pid_i = decisions_dict[pid_i][i].split(" ")
-        dth_dec_dict[pid_i] = dec_d_pid_i    
-    
-        # select the longest decision i.e. a superset of all other processes
-        if len(dec_d_pid_i) > len(longest_dec_d):
-            longest_dec_d = dec_d_pid_i
-            longest_pid = pid_i 
-    #print(f"Decision round {i+1} longest decided set for pid {longest_pid}: {longest_dec_d}") 
 
+        # try to read i-th decision of process pid
+        try:
+            dec_d_pid_i = decisions_dict[pid_i][i].split(" ")
+            dth_dec_dict[pid_i] = dec_d_pid_i    
+    
+            # select the longest decision i.e. a superset of all other processes
+            if len(dec_d_pid_i) > len(longest_dec_d):
+                longest_dec_d = dec_d_pid_i
+                longest_pid = pid_i 
+            #print(f"Decision round {i+1} longest decided set for pid {longest_pid}: {longest_dec_d}") 
+        except Exception as e:
+            #print(e)
+            continue
     # get all proposed values in this round
     dth_dec_union_of_proposals = set(sum(dth_prop_dict.values(), []))
     #print(dth_dec_union_of_proposals)
@@ -96,7 +104,9 @@ for i in range(d):
         dth_dec_pid_i  = dth_dec_dict [pid_i] # the decided set
         dth_prop_pid_i = dth_prop_dict[pid_i] # the proposed set
         #print(f"[VALIDITY1] Process pid {pid_i} proposed: {dth_prop_pid_i}, decided: {dth_dec_pid_i} in round {i+1}")
-
+        for pp in dth_prop_pid_i:
+            if pp not in dth_dec_pid_i:
+                print(f"{pp} is not in decided set for pid {pid_i} in round {i+1}!")
         assert set(dth_prop_pid_i).issubset(dth_dec_pid_i), f"[VALIDITY1] Proposed set {dth_prop_pid_i} is not a subset of decided set {dth_dec_pid_i} for process pid {pid_i} in round {i+1}"
 
     ###################
@@ -107,6 +117,10 @@ for i in range(d):
     for pid_i in dth_dec_dict.keys(): # only for those who have an output
         dth_dec_pid_i  = dth_dec_dict [pid_i] # the decided set
         
+        for dd in dth_dec_pid_i:
+            if dd not in dth_dec_union_of_proposals:
+                print(f"{dd} is not in union of all proposals for pid {pid_i} in round {i+1}")
+
         assert set(dth_dec_pid_i).issubset(dth_dec_union_of_proposals), f"[VALIDITY2] Decided set {dth_dec_pid_i} is not a subset of all proposed values {dth_dec_union_of_proposals} for process pid {pid_i} in round {i+1}"
     
     
