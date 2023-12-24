@@ -49,20 +49,6 @@ static void stop(int) {
   std::cout << "Writing output of pid " << logger_p2p.my_pid << " into: " << logger_p2p.output_path << std::endl;
   logger_p2p.log_ld_buffer(1);
 
-/*
-  std::cout << "Msgs contained in ack_seen_map at end:" << std::endl;
-  for (auto &mes : ack_seen_map){
-     std::cout << "(b" << mes.first << ' ';
-     for (auto &mes_sn: mes.second){
-       std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes: ";
-       for (auto &procc: mes_sn.second){
-         std::cout << 'p' << procc << ' ';
-       }
-       std::cout << std::endl;
-     }
-   }
-   std::cout << std::endl;
-*/
   // exit directly from signal handler
   exit(0);
 }

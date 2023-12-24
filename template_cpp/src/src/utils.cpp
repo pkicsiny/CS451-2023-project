@@ -134,11 +134,40 @@ std::vector<std::string> DecodeProposal(const char* msg_buffer, size_t &offset) 
 
 void Logger::log_ld_buffer(int call_mode){
 
+  // check number of lines in output file
+  int num_lines = 0;
+  std::ifstream output_file_line_count(output_path);
+  std::string unused_line;
+  while (std::getline(output_file_line_count, unused_line)){
+    ++num_lines;
+  }
+  //std::cout << "There are " << num_lines << " decisions logged in the file." << std::endl;
+  if (output_file_line_count.is_open()){output_file_line_count.close();}
+
+  int log_start_idx = num_lines % MAX_LOG_PERIOD;
+  //std::cout << "current buffer logged until index " << log_start_idx << std::endl;
+
+
   std::fstream output_file;
   //std::cout << "log_ld_buffer call mode: " << call_mode << ", file is open: "<< output_file.is_open() << std::endl;
 
+  output_file.open(output_path, std::ios_base::app);
+
+  if (output_file.is_open()){
+    for(int i = log_start_idx; i < ld_idx; i++) {
+      std::stringstream ss; // stringstream containing a full log line
+      ss << ld_buffer[i].line;
+      //if ((i==5) && (call_mode==0)){std::cout << "sleep" << std::endl; output_file.close(); sleep(100000);}
+      //std::cout << "sigterm ld_idx: "<< i << ", logging the line: " << ld_buffer[i].line << ", ss: " << ss.str()<< std::endl;
+      output_file << ss.str();
+    }
+    ld_idx = 0; // reset pointer in log buffer
+  }else{
+    std::cout << "Could not open output file: " << output_path << std::endl;
+  }
+
+/*
   output_file.open(output_path, std::ios_base::in | std::ios_base::app);
-  //std::cout << "opened output for in and append" << std::endl;
   bool do_log;
   int last_ld_idx = -1;
   if (output_file.is_open()){
@@ -149,12 +178,17 @@ void Logger::log_ld_buffer(int call_mode){
       ss << ld_buffer[i].line;
       //if ((i==5) && (call_mode==0)){std::cout << "sleep" << std::endl; output_file.close(); sleep(100000);}
       do_log = check_dupes(do_log, output_file, ss, call_mode, last_ld_idx, i); // check if msg already in logfile (relevant after sigterm/int)
-      if (do_log){output_file << ss.str();}
+      if (do_log){
+        std::cout << "sigterm ld_idx: "<< i << ", logging the line: " << ld_buffer[i].line << ", ss: " << ss.str()<< std::endl;
+        output_file << ss.str();
+      }
     }
     ld_idx = 0; // reset pointer in log buffer
   }else{
     std::cout << "Could not open output file: " << output_path << std::endl;
   }
+*/
+
   output_file.close();
   //std::cout << "log_ld_buffer properly finished" << std::endl;
 }
@@ -172,11 +206,13 @@ Logger::Logger(const char* op, int pid){
 
 // when sigterm issued while logging: part of log buffer is logged, sigterm log call relogs full chunk, some can be dupes
 bool Logger::check_dupes(bool& do_log, std::fstream& output_file, std::stringstream& desired_line, int call_mode, int& last_ld_idx, int i){
-    //std::cout << "check_dupes " << i << "/"<< last_ld_idx+1 << std::endl;
+    //std::cout << "check_dupes " << i << std::endl;
   // this is called only upon sigterm/sigint
   if ((call_mode==1) && (i==last_ld_idx+1)){
     std::string cur_line;
     output_file.seekg(0, std::ios::beg);  // move get (read) pointer to start
+
+    int line_counter = 0;
     while (std::getline(output_file, cur_line)) {
       if (std::cin.good()) {cur_line += '\n';} // if there should be nl add nl (relevant at last line)
 
@@ -184,8 +220,10 @@ bool Logger::check_dupes(bool& do_log, std::fstream& output_file, std::stringstr
       if (cur_line == desired_line.str()) {
         do_log = false;
         last_ld_idx = i;
+        //std::cout << "ld_idx: " << i << " is a dupe with line (starts at 0) "<<line_counter << std::endl;
         break;  // exit while loop, dont log this line
       }
+      line_counter++;
     }
     //std::cout << "check_dupes set write pointer to eof" << std::endl;
     output_file.clear();  // loop could have reached end of file, reset errorbit
@@ -210,6 +248,7 @@ void Logger::log_decide(std::vector<std::string>& proposed_vec, int c_idx, int c
   delivered_map[c_idx] = true;
   proposed_vec.clear();
 
+  // ld_idx goes up to maxlogperiod-1 and then ++ and this triggers
   if(ld_idx == MAX_LOG_PERIOD){log_ld_buffer(call_mode);}
 }
 
@@ -241,11 +280,11 @@ void read_single_line(const char* config_path, int c_idx, std::map<int, std::vec
 
   config_file.close();
 
-/*
-  std::cout << "Read config line "<< c_idx << ", current proposed_vec: ";
-  for (const auto& element : proposed_vec[c_idx]) {
-    std::cout << element << ", ";
-  }
-  std::cout << std::endl;
-*/
+
+  //std::cout << "Read config line "<< c_idx << ", current proposed_vec: ";
+  //for (const auto& element : proposed_vec[c_idx]) {
+  //  std::cout << element << ", ";
+ // }
+ // std::cout << std::endl;
+
 }
