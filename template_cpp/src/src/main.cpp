@@ -100,7 +100,6 @@ int main(int argc, char **argv) {
   for (auto &host : hosts_vec) {
     port_pid_map[host.port] = static_cast<int>(host.id);
     n_procs++;
-    //std::cout << "port: " << host.port << ": process ID " << port_pid_map[host.port] << std::endl;
   }
   std::cout << "There are " << n_procs << " processes in the execution." << std::endl;
 
@@ -160,30 +159,6 @@ int main(int argc, char **argv) {
   // read first proposal
   read_single_line(parser.configPath(), 1, proposed_vec);
 
-/*
-    // read all proposal sets (one proposal per line in config)
-    int c_counter = 0;
-    while (getline(config_file, l_line)){
-      std::istringstream iss(l_line); // get next proposal
-
-      // split set values and push into vector
-      while(iss){
-      std::string l_header_i;
-        iss >> l_header_i;
-        if (!l_header_i.empty()) {
-            proposed_vec[c_counter+1].push_back(l_header_i);
-        }
-      }
-      c_counter++;
-    }
-    config_file.close();
-    std::cout << "Total lines read: "<< c_counter << std::endl;
-
-  }else{
-    std::cout << "[ERROR] Could not open config file: " << parser.configPath() << std::endl;
-    return -1;
-  }
-*/  
   if (NUM_PROPOSALS == -1 || MAX_LEN_PROPOSAL == -1 || NUM_DISTINCT_ELEMENTS == -1){
     std::cout << "[ERROR] Reading config failed. NUM_PROPOSALS: " << NUM_PROPOSALS << ", MAX_LEN_PROPOSAL: "<< MAX_LEN_PROPOSAL << ", NUM_DISTINCT_ELEMENTS: " << NUM_DISTINCT_ELEMENTS << std::endl;
     return -1;
@@ -263,18 +238,9 @@ int main(int argc, char **argv) {
       read_single_line(parser.configPath(), la.c_idx, proposed_vec);
       read_new_line = false;
     }
-
-
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;
-
-  // After a process finishes broadcasting,
-  // it waits forever for the delivery of messages.
-  while (true) {
-    
-    //std::this_thread::sleep_for(std::chrono::hours(1));
-  }
 
   return 0;
 }

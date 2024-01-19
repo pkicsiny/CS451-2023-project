@@ -54,15 +54,8 @@ void PerfectLink::broadcast(std::vector<std::string> proposed_vec, Logger& logge
       int to_port = ntohs(to_addr.sin_port); 
       int to_pid = port_pid_map[to_port];
 
-//      std::cout << "=========================Send proposal to pid (" << to_pid <<")=========================" << std::endl;
-
       if (my_pid == to_pid){
         accepted_vec[c_idx] = proposed_vec;
-        //std::cout << "Setting my accepted_vec with my initial proposed_vec: ";
-        //for (const auto& element : proposed_vec) {
-        //  std::cout << element << ", ";
-        //}
-        //std::cout << std::endl;
       }else{
 
         // encodes and returns a msg packet
@@ -78,8 +71,6 @@ void PerfectLink::broadcast(std::vector<std::string> proposed_vec, Logger& logge
 
 
 std::vector<char> PerfectLink::create_send_packet(std::vector<std::string> proposed_vec, int c_idx, int apn, Logger& logger_p2p, int to_pid){
-
-  //std::cout << "Encoding proposal" << std::endl;
 
   // fill up packet with max 8 messages, or until there are msgs left 
   std::vector<char> msg_packet;
@@ -127,12 +118,8 @@ void PerfectLink::resend(Logger& logger_p2p, int socket_fd, sockaddr_in to_addr,
     int to_port = ntohs(to_addr.sin_port); 
     int to_pid = port_pid_map[to_port];
 
-//    std::cout << "=========================Resending unacked proposal to pid ("<< to_pid <<")=========================" << std::endl;
-
     // loop through all consensuses all apns and send corresponding proposal
-    // optimize: only resend highest apn proposed_vec from each c_idx
     if(!(logger_p2p.resend_map[c_idx][apn[c_idx]][to_pid].empty())){
-      //std::cout << "resend map c_i: " << c_i << ", apn[c_idx]: " << apn[c_idx] << ", to_pid: " << to_pid << " has size: " << logger_p2p.resend_map[c_i][apn[c_idx]][to_pid].size() << std::endl;
       this->send(logger_p2p.resend_map[c_idx][apn[c_idx]][to_pid], to_addr, to_pid, socket_fd, c_idx, apn[c_idx]);
     } // end if resend unacked
   }  // end for hosts
@@ -144,8 +131,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
   // address of sender
   sockaddr_in from_addr;
   socklen_t sizeof_from_addr = sizeof(from_addr);
-
-//  std::cout << "=========================Listening for messages to receive=========================" << std::endl;
 
   while(true){
       char recv_buf[65535]; // buffer for messages in bytes
@@ -163,8 +148,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
         int sender_port = ntohs(from_addr.sin_port); 
         int sender_pid = port_pid_map[sender_port];
 
-        //std::cout << "[recv::RECV] received " << r_recv_msg_packet << " bytes from pid (" << sender_pid << ")" << std::endl;
-
         recv_buf[r_recv_msg_packet] = '\0'; //end of line to truncate junk
         std::vector<char> recv_packet(recv_buf, recv_buf + r_recv_msg_packet);  // put received data into vector
 
@@ -175,7 +158,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
         DecodeMetadata(recv_packet.data(), is_ack_recv, c_idx_recv, apn_recv, b_pid_recv, offset);
         
         // 0: proposal sent, 1: ACK sent back, 2: NACK sent back
-        //std::cout << "Received proposal sent from pid: " << sender_pid << ", originlly b from: " << b_pid_recv << ". is_ack_recv: "<< is_ack_recv << ", c_idx_recv: " << c_idx_recv << ", apn_recv: " << apn_recv << ". my_c_idx: " << my_c_idx << ", my_apn[c_idx]: " << my_apn[my_c_idx] << std::endl;  
         if(is_ack_recv==0){
 
           // ignore proposals from future consensus rounds until my_c_idx catches up
@@ -188,13 +170,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
             std::sort(decoded_proposed_vec.begin(), decoded_proposed_vec.end());
             std::sort(accepted_vec[c_idx_recv].begin(), accepted_vec[c_idx_recv].end());
 
-            //std::cout << "Received proposal: ";
-            //for (auto& p_i: decoded_proposed_vec){std::cout << p_i << ", ";}
-            //std::cout << std::endl;
-            //std::cout << "My current accepted_vec: ";
-            //for (auto& p_i: accepted_vec[c_idx_recv]){std::cout << p_i << ", ";}
-            //std::cout << std::endl;
-  
             // compare partner's proposal to my proposal
             if (std::includes(decoded_proposed_vec.begin(), decoded_proposed_vec.end(), accepted_vec[c_idx_recv].begin(), accepted_vec[c_idx_recv].end())) {
           
@@ -202,7 +177,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
               std::vector<char> ack_packet;
               int is_ack = 1;
               EncodeMetadata(ack_packet, is_ack, c_idx_recv, apn_recv, b_pid_recv);
-              //std::cout << "Send ACK for c_idx_recv: " << c_idx_recv << ", apn_recv: " << apn_recv << std::endl;
               send_ack(ack_packet, from_addr, socket_fd);
 
             // accepted_vec is either superset or disjoint to decoded_proposed_vec
@@ -219,7 +193,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
               int is_ack = 2;
               EncodeMetadata(nack_packet, is_ack, c_idx_recv, apn_recv, b_pid_recv);
               EncodeProposal(accepted_vec[c_idx_recv], nack_packet);
-              //std::cout << "Send NACK for c_idx_recv: " << c_idx_recv << ", apn_recv: " << apn_recv << std::endl;
               send_ack(nack_packet, from_addr, socket_fd);
             }
           }
@@ -228,7 +201,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
           // ack counting is always for current consensus round 
           if ((c_idx_recv == my_c_idx) && (my_apn[c_idx_recv] == apn_recv)){
             // only 1 proposal for each [c_idx, apn, pid] key; if not in map then map remains unmodified; delete a msg = stop resend
-            //std::cout << "------------- ACK/NACK ---------------" << std::endl;
             // i only get acks/nacks from b_myself
             std::vector<char> packet_to_erase;
             EncodeMetadata(packet_to_erase, 0, c_idx_recv, apn_recv, b_pid_recv);
@@ -250,11 +222,6 @@ void PerfectLink::recv(std::vector<std::string>& proposed_vec, Logger& logger_p2
               unique_set.insert(decoded_proposed_vec.begin(), decoded_proposed_vec.end());
               std::vector<std::string> mergedVector(unique_set.begin(), unique_set.end());
               proposed_vec.assign(unique_set.begin(), unique_set.end());
-              //std::cout << "Extending my proposed_vec: ";
-              //for (const auto& element : proposed_vec) {
-              //  std::cout << element << ", ";
-              //}
-              //std::cout << std::endl;
             }
           }  // end if my_apn==apn_recv
         }  // end if ack_recv==0
