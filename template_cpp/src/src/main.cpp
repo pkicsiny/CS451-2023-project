@@ -26,10 +26,6 @@
 #include "perfect_link.hpp"
 #include "la.hpp"
 
-/*-------*/
-// begin //
-/*-------*/
-
 Logger logger_p2p;
 std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
 
