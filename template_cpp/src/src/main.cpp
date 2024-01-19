@@ -26,12 +26,7 @@
 #define MAX_LOG_PERIOD 100
 #define MAX_MSG_SN 2147483646  // fixed by assignment, max_int-1 32 bit
 
-/*-------*/
-// begin //
-/*-------*/
-
 Logger logger_p2p;
-
 
 static void stop(int) {
   // reset signal handlers to default
