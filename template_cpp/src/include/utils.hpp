@@ -47,7 +47,6 @@ struct MessageList{
       sn_idx++;  // goes up to NUM_MSG
       msg_remaining--;  // goes down to 0
     }
-    //std::cout << "Message list refilled with " << msg_list.size() << " messages." << std::endl;
   }
 };
 
@@ -64,15 +63,10 @@ void EncodeMessage(const Message& msg, std::vector<char>& msg_buffer, int packet
     size_t msg_size = msg.msg.size();
     uint32_t msg_ser_size = htonl(static_cast<uint32_t>(msg_size));  // 4 bytes encoding msg length
 
-    //std::cout << "encoding msg: " << msg.msg << std::endl;
-
     // order of serialized Message: [len_msg, msg, sn]
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&msg_ser_size), reinterpret_cast<char*>(&msg_ser_size) + sizeof(uint32_t));  // 4 bytes
-//    std::cout << "msg_buffer after encoding msg_size: " << msg_buffer.size() << " bytes" << std::endl;
     msg_buffer.insert(msg_buffer.end(), msg_ser, msg_ser + msg_size);  // 1 byte
-//    std::cout << "msg_buffer after encoding msg: " << msg_buffer.size() << " bytes" << std::endl;
     msg_buffer.insert(msg_buffer.end(), reinterpret_cast<char*>(&sn_ser), reinterpret_cast<char*>(&sn_ser) + sizeof(uint32_t));  // 4 bytes
-//    std::cout << "msg_buffer after encoding sn: " << msg_buffer.size() << " bytes" << std::endl;
 }
 
 Message DecodeMessage(const char* msg_buffer, size_t &offset);
@@ -129,8 +123,6 @@ void EncodeAck(const Ack& ack, std::vector<char>& ack_buffer, int sender_pid) {
     size_t ack_size = ack.msg.size();
     uint32_t ack_ser_size = htonl(static_cast<uint32_t>(ack_size));
 
-    //std::cout << "Encode ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
-
     // order of serialized Message: [len_msg, msg, sn, pid]
     ack_buffer.insert(ack_buffer.end(), reinterpret_cast<char*>(&ack_ser_size), reinterpret_cast<char*>(&ack_ser_size) + sizeof(uint32_t));
     ack_buffer.insert(ack_buffer.end(), ack_ser, ack_ser + ack_size);
@@ -147,26 +139,21 @@ Ack DecodeAck(const char* ack_buffer, size_t &offset) {  // offset=0 for first c
     std::memcpy(&ack_ser_size, ack_buffer + offset, sizeof(uint32_t));
     size_t ack_size = ntohl(ack_ser_size);
     offset += sizeof(uint32_t);
-    //std::cout << "offset: " << offset << std::endl;
 
     // decode msg
     ack.msg.assign(ack_buffer + offset, ack_size);
     offset += ack_size;
-    //std::cout << "offset: " << offset << std::endl;
 
     // decocde sn
     std::memcpy(&(ack.sn), ack_buffer + offset, sizeof(uint32_t));
     ack.sn = ntohl(ack.sn);
     offset += sizeof(uint32_t);
-    //std::cout << "offset: " << offset << std::endl;
 
     // decocde sender pid
     uint32_t pid_ser;
     std::memcpy(&(pid_ser), ack_buffer + offset, sizeof(uint32_t));
     ack.pid = ntohl(pid_ser);
     offset += sizeof(uint32_t);
-
-    //std::cout << "Decoded ack: 'ack_size': " << ack_size << ", 'ack.msg': " << ack.msg << ", 'ack.sn':" << ack.sn << ", 'ack.pid':" << ack.pid << std::endl;
 
     return ack;
 }
