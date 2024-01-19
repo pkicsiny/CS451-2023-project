@@ -50,7 +50,6 @@ void MessageList::refill(int b_pid, int is_ack){
       sn_idx++;  // goes up to NUM_MSG
       msg_remaining--;  // goes down to 0
     }
-    //std::cout << "Message list refilled with " << msg_list.size() << " messages." << std::endl;
   }
 
 // for assignment full msg size is: 4+x+4=12 8+x bytes
@@ -117,11 +116,8 @@ void Logger::log_lm_buffer(int call_mode){
       std::stringstream ss; // stringstream containing a full log line
       if(lm_buffer[i].msg_type == 'b'){
         ss << "b " << lm_buffer[i].m.msg << std::endl;
-        //std::cout << ss.str();
       }else{
         ss << "d " << lm_buffer[i].sender_pid << ' ' << lm_buffer[i].m.msg << std::endl;
-//        std::cout << ss.str();
-//        if ((i==10) && (call_mode==0)){std::cout << "sleep" << std::endl; output_file.close(); sleep(100000);}
       }
       do_log = check_dupes(do_log, output_file, ss, call_mode, last_lm_idx, i); // check if msg already in logfile (relevant after sigterm/int)
       if (do_log){output_file << ss.str();}
@@ -174,11 +170,8 @@ void Logger::log_deliver(Message msg, int is_ack, int call_mode){
   // if not yet delivered and not in pending (ie new msg, could be from any sender), add to pendong. [] creates b_pid key
   if (delivered_map[b_pid].find(msg.msg) == delivered_map[b_pid].end()){
     if (pending_sn_uset[b_pid].find(msg.sn) == pending_sn_uset[b_pid].end()){
-    //if (std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), msg) == recv_pending_map[b_pid].end()){
-//       std::cout << "adding b" << b_pid << ' ' << msg.msg << " to relay" << std::endl;
        pending_sn_uset[b_pid].insert(msg.sn);
        pending_msg_map[b_pid][msg.sn] = msg;
-//       recv_pending_map[b_pid].push_back(msg);
   
       // this takes care of relay: i resend msgs that were sent to me (broadcasts, relays)
       // only if not yet in pending, add to relay list; one msg from a b_pid will be added to relay list only once
@@ -204,8 +197,6 @@ void Logger::log_deliver(Message msg, int is_ack, int call_mode){
     // attempt delivery: for all msg that is already in pending
 
     // check seq. num in pending from b_pid
-//    auto next_msg_it = std::find(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]); 
-//    while ((next_msg_it != recv_pending_map[b_pid].end()) && ((*next_msg_it).sn == next_vec[b_pid-1])){
     while (pending_sn_uset[b_pid].find(next_vec[b_pid-1]) != pending_sn_uset[b_pid].end()){
         Message next_msg = pending_msg_map[b_pid][next_vec[b_pid-1]];
         assert(next_msg.sn==next_vec[b_pid-1]);
@@ -213,7 +204,6 @@ void Logger::log_deliver(Message msg, int is_ack, int call_mode){
         // urb: if msg is not yet delivered and seen by more than half of procs
         if ((delivered_map[b_pid].find(next_msg.msg) == delivered_map[b_pid].end()) &&
           (static_cast<float>(ack_seen_map[b_pid][next_msg.sn].size()) > 0.5*n_procs)){
-            //std::cout << "d " << b_pid << ' ' << next_msg.msg << std::endl;
             delivered_map[b_pid].insert(next_msg.msg);
             LogMessage lm;
             lm.m = next_msg;
@@ -225,7 +215,6 @@ void Logger::log_deliver(Message msg, int is_ack, int call_mode){
             pending_sn_uset[b_pid].erase(next_msg.sn);
             pending_msg_map[b_pid].erase(next_msg.sn);
             next_vec[b_pid-1]++;
-//            next_msg_it = std::lower_bound(recv_pending_map[b_pid].begin(), recv_pending_map[b_pid].end(), next_vec[b_pid-1]);
             }else{break;}  // end fifo deliver
         } // end urb deliver
   }

@@ -3,7 +3,6 @@
 #include <thread>
 
 #include "parser.hpp"
-#include "hello.h"
 #include <signal.h>
 
 // I load these
@@ -53,20 +52,6 @@ static void stop(int) {
   std::cout << "Writing output.\n";
   logger_p2p.log_lm_buffer(1);
 
-/*
-  std::cout << "Msgs contained in ack_seen_map at end:" << std::endl;
-  for (auto &mes : ack_seen_map){
-     std::cout << "(b" << mes.first << ' ';
-     for (auto &mes_sn: mes.second){
-       std::cout << "sn " << mes_sn.first << "): seen by " << mes_sn.second.size() << " processes: ";
-       for (auto &procc: mes_sn.second){
-         std::cout << 'p' << procc << ' ';
-       }
-       std::cout << std::endl;
-     }
-   }
-   std::cout << std::endl;
-*/
   // exit directly from signal handler
   exit(0);
 }
@@ -82,7 +67,6 @@ int main(int argc, char **argv) {
   Parser parser(argc, argv);
   parser.parse();
 
-  hello();
   std::cout << std::endl;
   std::cout << "My PID: " << getpid() << "\n";
   std::cout << "From a new terminal type `kill -SIGINT " << getpid() << "` or `kill -SIGTERM "
@@ -114,11 +98,9 @@ int main(int argc, char **argv) {
 
   hosts_vec = parser.hosts();
 
-  // std::map<int, int> port_pid_map;  // in parser: port: u16 bit, pid: u32 bit (could be u16)
   for (auto &host : hosts_vec) {
     port_pid_map[host.port] = static_cast<int>(host.id);
     n_procs++;
-    //std::cout << "port: " << host.port << ": process ID " << port_pid_map[host.port] << std::endl;
   }
   std::cout << "there are " << n_procs << " processes in the execution." << std::endl;
 
@@ -155,7 +137,6 @@ int main(int argc, char **argv) {
 
     if (config_file.is_open()){
       while (getline(config_file, l_in, ' ')){
-        //std::cout << l_in << std::endl;
         config_file_content_vec.push_back(std::stoi(l_in));
       }
       NUM_MSG = config_file_content_vec[0];  // num messages sent by each process
@@ -337,13 +318,6 @@ int main(int argc, char **argv) {
   }  // end while send
 
   std::cout << "Finished broadcasting." << std::endl;
-
-  // After a process finishes broadcasting,
-  // it waits forever for the delivery of messages.
-  while (true) {
-    
-    //std::this_thread::sleep_for(std::chrono::hours(1));
-  }
 
   return 0;
 }
