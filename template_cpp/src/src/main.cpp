@@ -3,7 +3,6 @@
 #include <thread>
 
 #include "parser.hpp"
-#include "hello.h"
 #include <signal.h>
 
 // I load these
@@ -64,7 +63,6 @@ int main(int argc, char **argv) {
   Parser parser(argc, argv);
   parser.parse();
 
-  hello();
   std::cout << std::endl;
   std::cout << "My PID: " << getpid() << "\n";
   std::cout << "From a new terminal type `kill -SIGINT " << getpid() << "` or `kill -SIGTERM "
