@@ -1,5 +1,5 @@
 # Distributed Algorithms 2023/24 - EPFL
-Graded: 5.81/6
+Grade: 5.81/6 (i.e. it works and it's fast)
 
 # Overview
 The goal of this practical project is to implement certain building blocks necessary for a decentralized system. To this end, some underlying abstractions will be used:
